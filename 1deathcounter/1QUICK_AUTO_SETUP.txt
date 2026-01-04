@@ -1,0 +1,82 @@
+═══════════════════════════════════════════════════════════════
+  AUTOMATIC DEATH COUNT & GAME SWITCHING - QUICK SETUP
+═══════════════════════════════════════════════════════════════
+
+GOAL: Auto-update death counts + Easy game switching
+
+═══════════════════════════════════════════════════════════════
+PART 1: AUTOMATIC DEATH COUNT UPDATES
+═══════════════════════════════════════════════════════════════
+
+1. Create Action: "Auto Update Death Count"
+2. Add Sub-Action: Execute C# Code
+3. Copy code from: StreamerBot_GetDeathCount.cs
+4. Paste and Compile
+5. Add Trigger: Timer → Set to 5 seconds → Enable
+6. Save
+
+RESULT: Death counts update every 5 seconds automatically!
+
+═══════════════════════════════════════════════════════════════
+PART 2: GAME SWITCHING (HOTKEYS)
+═══════════════════════════════════════════════════════════════
+
+For EACH game (Elden Ring, Dark Souls 3, etc.):
+
+1. Create Action: "Switch to [Game Name]"
+   Example: "Switch to Elden Ring"
+
+2. Add Sub-Action: Set Global Variable
+   - Variable Name: GameName
+   - Variable Value: Elden Ring  (exact name from config)
+
+3. Add Sub-Action: Execute Action
+   - Select: "Switch Game and Get Count"
+   (Use the new StreamerBot_SwitchGameAndGetCount.cs code)
+
+4. Assign Hotkey (e.g., Ctrl+1, Ctrl+2, etc.)
+
+REPEAT for each game with different hotkeys.
+
+═══════════════════════════════════════════════════════════════
+USAGE
+═══════════════════════════════════════════════════════════════
+
+While Gaming:
+- Death counts update automatically every 5 seconds
+- Press hotkey (e.g., Ctrl+1) to switch games
+- Variables always show current counts:
+  * %DeathCountTotal%
+  * %DeathCountGame%
+  * %DeathCounterCurrentGame%
+
+In OBS:
+- Use Text (GDI+) source → Read from file
+- File: C:\deathcounter\death_counter.txt
+- Updates automatically (no Streamer.bot needed!)
+
+═══════════════════════════════════════════════════════════════
+FILES NEEDED
+═══════════════════════════════════════════════════════════════
+
+For Auto-Update:
+- StreamerBot_GetDeathCount.cs
+
+For Game Switching:
+- StreamerBot_SwitchGameAndGetCount.cs (NEW - combines both)
+
+═══════════════════════════════════════════════════════════════
+NOTES
+═══════════════════════════════════════════════════════════════
+
+- Game names must match exactly (case-sensitive)
+- Death counter daemon must be running
+- Timer updates every 5 seconds (adjustable)
+- Game switching requires manual hotkey press (no auto-detect)
+
+See AUTO_SETUP_GUIDE.md for detailed instructions.
+
+
+
+
+
