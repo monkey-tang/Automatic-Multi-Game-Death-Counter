@@ -1,0 +1,13 @@
+{
+  "total_deaths": 0,
+  "game_deaths": {
+    "Elden Ring": 0,
+    "Dark Souls Remastered": 0,
+    "Dark Souls II: Scholar of the First Sin": 0,
+    "Dark Souls 3": 0
+  },
+  "tick": 26470,
+  "streak": 0,
+  "last_death_ts": 0.0,
+  "current_game": "Elden Ring"
+}
