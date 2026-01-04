@@ -64,3 +64,7 @@ https://github.com/monkey-tang/deathcounter
 
 See the main repository for license information.
 
+
+
+## Latest Update
+Fixed Start Daemon button with Python detection and script path fallback.
