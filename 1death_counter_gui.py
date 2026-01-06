@@ -16,7 +16,17 @@ import threading
 from tkinter import *
 from tkinter import ttk, messagebox
 
-BASE_DIR = r"C:\1deathcounter"
+# Get the directory where this script is located (works for both .exe and .py)
+def get_base_dir():
+    """Get the base directory - same folder as this script."""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled .exe - use the directory where .exe is located
+        return os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        # Running as script - use the directory where the script is located
+        return os.path.dirname(os.path.abspath(__file__))
+
+BASE_DIR = get_base_dir()
 CONFIG_FILE = os.path.join(BASE_DIR, "games_config.json")
 STATE_JSON = os.path.join(BASE_DIR, "death_state.json")
 LOCK_FILE = os.path.join(BASE_DIR, "daemon.lock")
@@ -474,10 +484,47 @@ class DeathCounterGUI:
 
 
 def main():
+    # Prevent multiple instances of the GUI using Windows mutex
+    # Check mutex BEFORE creating any GUI elements
+    mutex = None
+    kernel32 = None
+    try:
+        import ctypes
+        mutex_name = "Global\\DeathCounterGUIMutex"
+        kernel32 = ctypes.windll.kernel32
+        mutex = kernel32.CreateMutexW(None, False, mutex_name)
+        last_error = kernel32.GetLastError()
+        
+        # If ERROR_ALREADY_EXISTS, another GUI instance is running
+        if last_error == 183:  # ERROR_ALREADY_EXISTS
+            if mutex:
+                kernel32.CloseHandle(mutex)
+            # Exit immediately - GUI already running
+            sys.exit(0)
+    except Exception:
+        # If mutex fails, continue anyway
+        pass
+    
     root = Tk()
     app = DeathCounterGUI(root)
-    root.protocol("WM_DELETE_WINDOW", app.on_closing)
-    root.mainloop()
+    
+    def cleanup():
+        try:
+            if mutex and kernel32:
+                kernel32.CloseHandle(mutex)
+        except:
+            pass
+        if hasattr(app, 'on_closing'):
+            app.on_closing()
+        else:
+            root.destroy()
+    
+    root.protocol("WM_DELETE_WINDOW", cleanup)
+    
+    try:
+        root.mainloop()
+    finally:
+        cleanup()
 
 
 if __name__ == "__main__":
