@@ -1,6 +1,8 @@
 # Death Counter Installer
 
-A standalone installer and launcher for the Multi-Game Death Counter application.
+**Complete Standalone Setup Application** - The full Windows executable file that sets up everything needed for the Multi-Game Death Counter with clear, step-by-step instructions and guided installation.
+
+This single `.exe` file is all you need - it contains everything required to set up and run the entire Death Counter system, including file extraction, dependency installation, Python setup, Tesseract OCR setup, Streamer.bot integration, and application launch.
 
 ## Quick Start
 
@@ -28,15 +30,20 @@ A standalone installer and launcher for the Multi-Game Death Counter application
 - ✅ Automatic death detection via OCR
 - ✅ StreamerBot integration ready
 
-## Installation Steps
+## Step-by-Step Installation Guide
 
-1. Run `DeathCounterInstaller.exe`
-2. Click "Install/Update Files" to extract necessary files
-3. If Python is missing, click "Install Python" (opens download page)
+1. **Run** `DeathCounterInstaller.exe` (double-click to launch)
+2. **Click "Install/Update Files"** → Extracts all application files to `C:\1deathcounter`
+3. **Click "Install Python"** (if needed) → Opens Python download page
    - **Important**: Check "Add Python to PATH" during installation
-4. If Tesseract OCR is missing, click "Install Tesseract" (opens download page)
-5. Click "Install Dependencies" to install required Python packages
-6. Click "Launch Death Counter" to start the application
+4. **Click "Install Tesseract"** (if needed) → Opens Tesseract OCR download page
+5. **Click "Install Dependencies"** → Installs all required Python packages (mss, pillow, opencv-python, pytesseract, numpy, psutil)
+6. **Click "Streamer.bot Download"** (optional) → Opens Streamer.bot download page
+7. **Click "Import to Streamer.bot"** (optional) → Opens Streamer.bot import dialog for action file
+8. **Click "✓ Confirm Import"** (if using Streamer.bot) → Enables the launch button
+9. **Click "Launch Death Counter"** → Starts the Death Counter GUI application
+
+The installer guides you through each step with clear buttons and status indicators. No manual configuration or additional downloads required - everything is handled automatically.
 
 ## Troubleshooting
 
