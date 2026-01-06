@@ -6,28 +6,31 @@ Fixed Start Daemon button with Python detection and script path fallback.
 ## File and Folder Descriptions
 
 ### `DeathCounterInstaller.exe`
-**Description:** The full application/executable installer for the Death Counter system. This is a complete, standalone installer that handles the entire setup process with step-by-step guidance. 
+**Description:** The complete standalone Windows executable installer application. This is the full application file that sets up everything needed for the Multi-Game Death Counter with clear, step-by-step instructions and guided installation.
 
-**What it does:**
-- **Extracts all necessary files** (daemon scripts, GUI, configuration files)
-- **Checks system requirements** (Python, Tesseract OCR installation status)
-- **Guides through installation steps** with clear buttons and status indicators
-- **Installs Python dependencies** automatically (mss, pillow, opencv-python, numpy, psutil, pytesseract)
-- **Integrates with Streamer.bot** by providing the action file for import
-- **Launches the Death Counter GUI** when setup is complete
+**Complete Setup Application Features:**
+1. **Extracts/Updates Files**: Automatically places all necessary scripts and configuration files into `C:\1deathcounter`
+2. **Checks System Requirements**: Verifies Python and Tesseract OCR installations
+3. **Installs Python (Optional)**: Provides download button if Python is not found
+4. **Installs Tesseract OCR (Optional)**: Provides download button if Tesseract is not found
+5. **Installs Python Dependencies**: Automatically installs all required packages (mss, pillow, opencv-python, pytesseract, numpy, psutil) with verification
+6. **Downloads Streamer.bot (Optional)**: Opens the Streamer.bot download page
+7. **Imports Streamer.bot Action**: Guides you to import the `deathcounteraction.cs` file into Streamer.bot
+8. **Confirms Import**: Enables the "Launch" button after Streamer.bot import is confirmed
+9. **Launches Death Counter GUI**: Starts the main graphical interface for the Death Counter application
 
-**Installation workflow:**
-1. Run `DeathCounterInstaller.exe`
-2. Click "Install/Update Files" to extract all application files
-3. Click "Install Python" (if needed) - opens download page
-4. Click "Install Tesseract" (if needed) - opens download page  
-5. Click "Install Dependencies" to install required Python packages
-6. Click "Streamer.bot Download" to get Streamer.bot
-7. Click "Import to Streamer.bot" and import the action file
-8. Click "Confirm Import" to enable the launch button
-9. Click "Launch Death Counter" to start the application
+**Step-by-Step Installation Workflow:**
+1. Run `DeathCounterInstaller.exe` (double-click to launch)
+2. Click **"Install/Update Files"** → Extracts all application files
+3. Click **"Install Python"** (if needed) → Opens Python download page
+4. Click **"Install Tesseract"** (if needed) → Opens Tesseract download page  
+5. Click **"Install Dependencies"** → Installs all required Python packages
+6. Click **"Streamer.bot Download"** → Opens Streamer.bot download page
+7. Click **"Import to Streamer.bot"** → Opens Streamer.bot import dialog
+8. Click **"✓ Confirm Import"** → Enables the launch button
+9. Click **"Launch Death Counter"** → Starts the Death Counter GUI application
 
-This executable is the **only file needed** to set up the entire Death Counter system on any Windows machine - it's completely self-contained and includes everything required for installation and operation.
+This single executable file contains everything needed to set up and run the entire Death Counter system on any Windows machine. No additional downloads or manual configuration required - it's a complete, self-contained setup application with step-by-step guidance.
 
 ### `DeathCounter_Installer_Standalone.py`
 **Description:** The Python source code for the standalone installer. This script contains all necessary files embedded as base64-encoded strings and creates a self-extracting installer. Used to build the `.exe` file.
