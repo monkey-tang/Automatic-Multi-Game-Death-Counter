@@ -110,9 +110,11 @@
         "height": 0.4074
       },
       "keywords": [
-        "DEATH"
+        "DEATH",
+        "死"
       ],
-      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=DEATH",
+      "tesseract_config": "--oem 3 --psm 7",
+      "tesseract_lang": "jpn+eng",
       "monitor_index": 2,
       "process_names": [
         "sekiro.exe"
