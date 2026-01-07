@@ -40,9 +40,9 @@
 
 ### Source Files
 All source code, scripts, and configuration files are located in the **`death counter source/`** folder:
-- `1multi_game_death_counter.py` - Main daemon script
-- `1death_counter_gui.py` - GUI application
-- `1games_config.json` - Game configuration
+- `multi_game_death_counter.py` - Main daemon script
+- `death_counter_gui.py` - GUI application
+- `games_config.json` - Game configuration
 - `DeathCounter_Installer_Standalone.py` - Installer source code
 - `build_single_file.py` - Build script
 - `reset_death_counter.py` - Reset script
@@ -51,7 +51,7 @@ All source code, scripts, and configuration files are located in the **`death co
 - Batch files and utilities
 
 ### Old Versions
-Previous installer versions (v1.1 - v1.6) are available in the **`old-versions`** branch.
+Previous installer versions (v1.1 - v1.5) are available in the **`old-versions`** branch.
 
 ## System Requirements
 
