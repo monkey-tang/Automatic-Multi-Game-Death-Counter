@@ -871,10 +871,11 @@ class DeathCounterGUI:
                     f.write(f"GUI: Python cmd: {python_cmd}\n")
                     f.write(f"GUI: LOCK_FILE exists: {os.path.exists(LOCK_FILE)}\n")
                     f.write(f"GUI: READY_FILE exists: {os.path.exists(READY_FILE)}\n")
-            except:
-                pass
-            
-            while waited < max_wait_time:
+                    f.flush()
+        except:
+            pass
+        
+        while waited < max_wait_time:
                 # Log every 2 seconds what we're checking
                 if waited > 0 and int(waited * 10) % 10 == 0:  # Every 1 second
                     try:
@@ -1023,10 +1024,10 @@ class DeathCounterGUI:
                 # Wait a bit before checking again
                 time.sleep(check_interval)
                 waited += check_interval
-            
-            # Timeout - check what happened
-            # Log timeout to debug file
-            try:
+        
+        # Timeout - check what happened
+        # Log timeout to debug file
+        try:
                 with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
                     f.write(f"GUI: TIMEOUT after {waited:.1f} seconds\n")
                     f.write(f"GUI: LOCK_FILE exists: {os.path.exists(LOCK_FILE)}\n")
@@ -1048,11 +1049,11 @@ class DeathCounterGUI:
                         return
                 except:
                     pass
-            
-            if process_exited:
-                # Already handled above
-                return
-            elif lock_file_created and os.path.exists(READY_FILE):
+        
+        if process_exited:
+            # Already handled above
+            return
+        elif lock_file_created and os.path.exists(READY_FILE):
                 # Both files exist - daemon should be running
                 if self.is_daemon_running():
                     self.update_status()
