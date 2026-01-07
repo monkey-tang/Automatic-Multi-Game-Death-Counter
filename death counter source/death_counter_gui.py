@@ -33,10 +33,11 @@ LOCK_FILE = os.path.join(BASE_DIR, "daemon.lock")
 READY_FILE = os.path.join(BASE_DIR, "daemon.ready")  # Signal file created after full initialization
 STOP_FILE = os.path.join(BASE_DIR, "STOP")
 GUI_DEBUG_LOG = os.path.join(BASE_DIR, "gui_debug.log")  # Debug log for GUI
-# Try both possible script names (with and without "1" prefix)
-SCRIPT_PATH = os.path.join(BASE_DIR, "1multi_game_death_counter.py")
+# Primary script path (new naming)
+SCRIPT_PATH = os.path.join(BASE_DIR, "multi_game_death_counter.py")
+# Backward compatibility: also try the old name if needed
 if not os.path.exists(SCRIPT_PATH):
-    SCRIPT_PATH = os.path.join(BASE_DIR, "multi_game_death_counter.py")
+    SCRIPT_PATH = os.path.join(BASE_DIR, "1multi_game_death_counter.py")
 DEATH_TXT = os.path.join(BASE_DIR, "death_counter.txt")
 
 
