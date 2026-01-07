@@ -105,37 +105,37 @@ DEFAULT_SETTINGS = {
 # =========================
 DEFAULT_GAMES = {
     "Elden Ring": {
-        "region": {"left": 520, "top": 470, "width": 880, "height": 200},
+        "region": {"use_percentages": True, "left": 0.2708, "top": 0.4352, "width": 0.4583, "height": 0.1852},
         "keywords": ["YOUDIED", "YOUDIE", "DIED"],
         "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
         "monitor_index": 2,
         "process_names": ["eldenring.exe", "elden ring.exe"],  # Process names to detect
     },
     "Dark Souls 3": {
-        "region": {"left": 520, "top": 470, "width": 880, "height": 200},
+        "region": {"use_percentages": True, "left": 0.2708, "top": 0.4352, "width": 0.4583, "height": 0.1852},
         "keywords": ["YOUDIED", "YOUDIE", "YOUD1ED", "YOUDlED", "YOUDI", "OUDIED", "YOUDIE0"],
         "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
         "monitor_index": 2,
         "process_names": ["darksoulsiii.exe", "dark souls iii.exe"],
     },
     "Dark Souls Remastered": {
-        "region": {"left": 520, "top": 470, "width": 880, "height": 200},
+        "region": {"use_percentages": True, "left": 0.2708, "top": 0.4352, "width": 0.4583, "height": 0.1852},
         "keywords": ["YOUDIED", "YOUDIE", "YOUD1ED", "YOUDlED", "YOUDI", "OUDIED", "YOUDIE0"],
         "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
         "monitor_index": 2,
         "process_names": ["darksoulsremastered.exe", "dark souls remastered.exe"],
     },
     "Dark Souls II: Scholar of the First Sin": {
-        "region": {"left": 520, "top": 470, "width": 880, "height": 200},
+        "region": {"use_percentages": True, "left": 0.2708, "top": 0.4352, "width": 0.4583, "height": 0.1852},
         "keywords": ["YOUDIED", "YOUDIE", "YOUD1ED", "YOUDlED", "YOUDI", "OUDIED", "YOUDIE0"],
         "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
         "monitor_index": 2,
         "process_names": ["darksoulsii.exe", "dark souls ii.exe", "darksouls2.exe"],
     },
     "Sekiro": {
-        "region": {"left": 520, "top": 470, "width": 880, "height": 200},
-        "keywords": ["YOUDIED", "YOUDIE", "DEATH"],
-        "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+        "region": {"use_percentages": True, "left": 0.3802, "top": 0.2685, "width": 0.2240, "height": 0.4074},
+        "keywords": ["DEATH"],
+        "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=DEATH",
         "monitor_index": 2,
         "process_names": ["sekiro.exe"],
     },
@@ -528,6 +528,7 @@ def detect_game(games: Dict) -> Optional[str]:
 def grab_region(sct: mss, monitor_index: int, region: dict, game_config: Dict = None) -> Image.Image:
     """
     Capture a region from the specified monitor.
+    Supports both absolute pixel coordinates and percentage-based coordinates for multi-resolution support.
     Note: Monitor auto-detection is now handled in the main loop with throttling
     to prevent race conditions. This function just uses the provided monitor_index.
     """
@@ -545,12 +546,64 @@ def grab_region(sct: mss, monitor_index: int, region: dict, game_config: Dict = 
         actual_index = monitor_index
     
     mon = sct.monitors[actual_index]
-    abs_region = {
-        "left": mon["left"] + region["left"],
-        "top": mon["top"] + region["top"],
-        "width": region["width"],
-        "height": region["height"],
-    }
+    mon_width = mon["width"]
+    mon_height = mon["height"]
+    
+    # Check if region uses percentage-based coordinates (0.0-1.0) or absolute pixels
+    use_percentages = False
+    if "use_percentages" in region:
+        use_percentages = bool(region["use_percentages"])
+    else:
+        # Auto-detect: if left/top/width/height are all <= 1.0, assume percentages
+        # Otherwise, if they're reasonable pixel values (> 10), use absolute
+        left_val = region.get("left", 0)
+        top_val = region.get("top", 0)
+        width_val = region.get("width", 0)
+        height_val = region.get("height", 0)
+        
+        # If all values are between 0 and 1, they're percentages
+        # But exclude 0.0 values as they could be valid pixel coordinates
+        if (0 < left_val <= 1 and 0 < top_val <= 1 and 
+            0 < width_val <= 1 and 0 < height_val <= 1):
+            use_percentages = True
+    
+    if use_percentages:
+        # Convert percentage-based coordinates to absolute pixels
+        # Percentages are relative to monitor resolution - works on ANY resolution including ultrawide!
+        abs_region = {
+            "left": int(mon["left"] + region["left"] * mon_width),
+            "top": int(mon["top"] + region["top"] * mon_height),
+            "width": int(region["width"] * mon_width),
+            "height": int(region["height"] * mon_height),
+        }
+        # Only log on first use or when monitor resolution changes (to avoid spam)
+        # This will be logged elsewhere if needed for debugging
+    else:
+        # Use absolute pixel coordinates (legacy mode)
+        # Scale based on a reference resolution (1920x1080) if base_resolution is provided
+        base_width = region.get("base_resolution_width", None)
+        base_height = region.get("base_resolution_height", None)
+        
+        if base_width and base_height:
+            # Scale region proportionally from base resolution to actual monitor resolution
+            scale_x = mon_width / base_width
+            scale_y = mon_height / base_height
+            abs_region = {
+                "left": int(mon["left"] + region["left"] * scale_x),
+                "top": int(mon["top"] + region["top"] * scale_y),
+                "width": int(region["width"] * scale_x),
+                "height": int(region["height"] * scale_y),
+            }
+            log(f"Scaled region from {base_width}x{base_height} to {mon_width}x{mon_height}: {region} -> {abs_region}")
+        else:
+            # No scaling - use absolute coordinates as-is (legacy behavior)
+            abs_region = {
+                "left": mon["left"] + region["left"],
+                "top": mon["top"] + region["top"],
+                "width": region["width"],
+                "height": region["height"],
+            }
+    
     # Capture at full quality (mss captures at native resolution)
     grab = sct.grab(abs_region)
     img = Image.frombytes("RGB", grab.size, grab.rgb)
