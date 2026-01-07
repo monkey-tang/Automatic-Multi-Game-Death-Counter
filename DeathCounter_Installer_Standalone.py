@@ -316,46 +316,121 @@ def check_japanese_lang_pack():
         return False, None
     
     jpn_file = os.path.join(tessdata_dir, "jpn.traineddata")
+    jpn_vert_file = os.path.join(tessdata_dir, "jpn_vert.traineddata")
+    # At minimum, jpn.traineddata must exist (jpn_vert is optional but recommended)
     return os.path.exists(jpn_file), tessdata_dir
 
 def download_japanese_lang_pack(tessdata_dir, log_callback=None):
-    """Download Japanese language pack for Tesseract."""
+    """Download Japanese language pack for Tesseract with multiple fallbacks."""
     jpn_file = os.path.join(tessdata_dir, "jpn.traineddata")
+    jpn_vert_file = os.path.join(tessdata_dir, "jpn_vert.traineddata")
     jpn_url = "https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata"
-    
-    try:
+    jpn_vert_url = "https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata"
+
+    def log(msg):
         if log_callback:
-            log_callback("Downloading Japanese language pack for Tesseract...")
-            log_callback("Note: Japanese pack is required for reliable Sekiro detection (Japanese '死' character)")
-        
-        import urllib.request
-        import urllib.error
-        
-        # Download the file
-        urllib.request.urlretrieve(jpn_url, jpn_file)
-        
-        # Verify file was downloaded (should be > 1MB)
-        if os.path.exists(jpn_file) and os.path.getsize(jpn_file) > 1024 * 1024:
-            if log_callback:
-                log_callback("Japanese language pack downloaded successfully!")
-                log_callback("Sekiro detection is now fully supported!")
+            log_callback(msg)
+
+    def file_ok(filepath):
+        return os.path.exists(filepath) and os.path.getsize(filepath) > 1024 * 1024
+
+    def download_file(url, filepath, method_name="", ssl_ctx=None):
+        """Helper to download a single file with given method."""
+        try:
+            if ssl_ctx:
+                with urllib.request.urlopen(url, context=ssl_ctx) as resp, open(filepath, "wb") as f:
+                    shutil.copyfileobj(resp, f)
+            else:
+                urllib.request.urlretrieve(url, filepath)
+            return file_ok(filepath)
+        except Exception as e:
+            log(f"{method_name} failed for {os.path.basename(filepath)}: {e}")
+            return False
+
+    log("Downloading Japanese language packs for Tesseract...")
+    log("Note: Japanese packs are required for reliable Sekiro detection (Japanese '死' character)")
+
+    import urllib.request
+    import urllib.error
+    import ssl
+    import subprocess
+    import shutil
+
+    # Attempt 1: standard urllib (validated SSL)
+    try:
+        log("Attempt 1: Downloading with standard SSL verification...")
+        jpn_ok = download_file(jpn_url, jpn_file, "Attempt 1")
+        jpn_vert_ok = download_file(jpn_vert_url, jpn_vert_file, "Attempt 1")
+        if jpn_ok and jpn_vert_ok:
+            log("Japanese language packs downloaded successfully!")
+            log("Sekiro detection is now fully supported!")
+            return True
+        elif jpn_ok:
+            log("jpn.traineddata downloaded successfully!")
+            log("Note: jpn_vert.traineddata failed, but basic support is available")
+            return True
+    except Exception as e:
+        log(f"Attempt 1 (urllib with SSL verify) failed: {e}")
+
+    # Attempt 2: urllib with relaxed SSL (ignore cert validation)
+    try:
+        log("Attempt 2: Downloading with relaxed SSL (ignoring certificate validation)...")
+        ctx = ssl._create_unverified_context()
+        jpn_ok = download_file(jpn_url, jpn_file, "Attempt 2", ctx)
+        jpn_vert_ok = download_file(jpn_vert_url, jpn_vert_file, "Attempt 2", ctx)
+        if jpn_ok and jpn_vert_ok:
+            log("Japanese language packs downloaded successfully! (Attempt 2 - unverified SSL)")
+            log("Sekiro detection is now fully supported!")
+            return True
+        elif jpn_ok:
+            log("jpn.traineddata downloaded successfully! (Attempt 2)")
+            log("Note: jpn_vert.traineddata failed, but basic support is available")
+            return True
+    except Exception as e:
+        log(f"Attempt 2 (urllib ignore cert) failed: {e}")
+
+    # Attempt 3: PowerShell Invoke-WebRequest with SkipCertificateCheck (Windows-only)
+    try:
+        log("Attempt 3: Downloading with PowerShell (bypassing certificate check)...")
+        ps_script = f'''
+$ProgressPreference = 'SilentlyContinue'
+$ErrorActionPreference = 'Stop'
+try {{
+    Invoke-WebRequest -Uri "{jpn_url}" -UseBasicParsing -SkipCertificateCheck -OutFile "{jpn_file}" -TimeoutSec 30
+    Invoke-WebRequest -Uri "{jpn_vert_url}" -UseBasicParsing -SkipCertificateCheck -OutFile "{jpn_vert_file}" -TimeoutSec 30
+    exit 0
+}} catch {{
+    Write-Host $_.Exception.Message
+    exit 1
+}}
+'''
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+            check=False, capture_output=True, text=True, timeout=60
+        )
+        jpn_ok = file_ok(jpn_file)
+        jpn_vert_ok = file_ok(jpn_vert_file)
+        if jpn_ok and jpn_vert_ok:
+            log("Japanese language packs downloaded successfully! (Attempt 3 - PowerShell)")
+            log("Sekiro detection is now fully supported!")
+            return True
+        elif jpn_ok:
+            log("jpn.traineddata downloaded successfully! (Attempt 3)")
+            log("Note: jpn_vert.traineddata failed, but basic support is available")
             return True
         else:
-            if log_callback:
-                log_callback("Warning: Downloaded file seems too small, may be corrupted")
-            return False
-            
-    except urllib.error.URLError as e:
-        if log_callback:
-            log_callback(f"Failed to download Japanese pack: {e}")
-            log_callback("You can manually download from:")
-            log_callback("https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata")
-            log_callback("Save it to: " + tessdata_dir)
-        return False
+            if result.stderr:
+                log(f"PowerShell error: {result.stderr}")
     except Exception as e:
-        if log_callback:
-            log_callback(f"Error downloading Japanese pack: {e}")
-        return False
+        log(f"Attempt 3 (PowerShell) failed: {e}")
+
+    # Final fallback: guide manual download
+    log("Japanese pack auto-download failed. Manual download recommended for Sekiro.")
+    log("Download from:")
+    log("  https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata")
+    log("  https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata")
+    log(f"Save to: {tessdata_dir}")
+    return False
 
 def install_dependencies():
     """Install Python dependencies."""
