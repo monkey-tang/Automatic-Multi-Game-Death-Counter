@@ -321,7 +321,7 @@ def check_japanese_lang_pack():
     return os.path.exists(jpn_file), tessdata_dir
 
 def download_japanese_lang_pack(tessdata_dir, log_callback=None):
-    """Download Japanese language pack for Tesseract with multiple fallbacks."""
+    """Download Japanese language pack for Tesseract with staged elevated copy to be more foolproof."""
     jpn_file = os.path.join(tessdata_dir, "jpn.traineddata")
     jpn_vert_file = os.path.join(tessdata_dir, "jpn_vert.traineddata")
     jpn_url = "https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata"
@@ -333,6 +333,16 @@ def download_japanese_lang_pack(tessdata_dir, log_callback=None):
 
     def file_ok(filepath):
         return os.path.exists(filepath) and os.path.getsize(filepath) > 1024 * 1024
+
+    def has_write_access(directory):
+        try:
+            test_path = os.path.join(directory, "__tmp_write_test__")
+            with open(test_path, "w") as f:
+                f.write("ok")
+            os.remove(test_path)
+            return True
+        except Exception:
+            return False
 
     def download_file(url, filepath, method_name="", ssl_ctx=None):
         """Helper to download a single file with given method."""
@@ -355,90 +365,93 @@ def download_japanese_lang_pack(tessdata_dir, log_callback=None):
     import ssl
     import subprocess
     import shutil
+    import tempfile
 
-    # Attempt 1: standard urllib (validated SSL)
+    # Stage downloads to a temp folder first (no admin needed)
+    temp_dir = tempfile.mkdtemp(prefix="tess_jpn_")
+    staged_jpn = os.path.join(temp_dir, "jpn.traineddata")
+    staged_jpn_vert = os.path.join(temp_dir, "jpn_vert.traineddata")
+
+    # Attempt 1: standard urllib (validated SSL) to temp
     try:
-        log("Attempt 1: Downloading with standard SSL verification...")
-        jpn_ok = download_file(jpn_url, jpn_file, "Attempt 1")
-        jpn_vert_ok = download_file(jpn_vert_url, jpn_vert_file, "Attempt 1")
+        log("Attempt 1: Downloading to temp with standard SSL verification...")
+        jpn_ok = download_file(jpn_url, staged_jpn, "Attempt 1")
+        jpn_vert_ok = download_file(jpn_vert_url, staged_jpn_vert, "Attempt 1")
         if jpn_ok and jpn_vert_ok:
-            log("Japanese language packs downloaded successfully!")
-            log("Sekiro detection is now fully supported!")
-            return True
+            log("Downloaded to temp successfully (Attempt 1)")
         elif jpn_ok:
-            log("jpn.traineddata downloaded successfully!")
-            log("Note: jpn_vert.traineddata failed, but basic support is available")
-            return True
+            log("Downloaded jpn.traineddata to temp (Attempt 1); jpn_vert failed")
     except Exception as e:
         log(f"Attempt 1 (urllib with SSL verify) failed: {e}")
 
-    # Attempt 2: urllib with relaxed SSL (ignore cert validation)
-    try:
-        log("Attempt 2: Downloading with relaxed SSL (ignoring certificate validation)...")
-        ctx = ssl._create_unverified_context()
-        jpn_ok = download_file(jpn_url, jpn_file, "Attempt 2", ctx)
-        jpn_vert_ok = download_file(jpn_vert_url, jpn_vert_file, "Attempt 2", ctx)
-        if jpn_ok and jpn_vert_ok:
-            log("Japanese language packs downloaded successfully! (Attempt 2 - unverified SSL)")
-            log("Sekiro detection is now fully supported!")
-            return True
-        elif jpn_ok:
-            log("jpn.traineddata downloaded successfully! (Attempt 2)")
-            log("Note: jpn_vert.traineddata failed, but basic support is available")
-            return True
-    except Exception as e:
-        log(f"Attempt 2 (urllib ignore cert) failed: {e}")
+    # Attempt 2: urllib with relaxed SSL (ignore cert) to temp if needed
+    if not (file_ok(staged_jpn) and file_ok(staged_jpn_vert)):
+        try:
+            log("Attempt 2: Downloading to temp with relaxed SSL (ignoring certificate validation)...")
+            ctx = ssl._create_unverified_context()
+            jpn_ok = file_ok(staged_jpn) or download_file(jpn_url, staged_jpn, "Attempt 2", ctx)
+            jpn_vert_ok = file_ok(staged_jpn_vert) or download_file(jpn_vert_url, staged_jpn_vert, "Attempt 2", ctx)
+            if jpn_ok and jpn_vert_ok:
+                log("Downloaded to temp successfully (Attempt 2 - unverified SSL)")
+            elif jpn_ok:
+                log("Downloaded jpn.traineddata to temp (Attempt 2); jpn_vert failed")
+        except Exception as e:
+            log(f"Attempt 2 (urllib ignore cert) failed: {e}")
 
-    # Attempt 3: PowerShell Invoke-WebRequest with SkipCertificateCheck (Windows-only)
-    try:
-        log("Attempt 3: Downloading with PowerShell (bypassing certificate check)...")
-        ps_script = f'''
+    # Attempt 3: PowerShell download to temp (handles certs)
+    if not (file_ok(staged_jpn) and file_ok(staged_jpn_vert)):
+        try:
+            log("Attempt 3: Downloading to temp with PowerShell (bypassing certificate check)...")
+            ps_script = f'''
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-try {{
-    Invoke-WebRequest -Uri "{jpn_url}" -UseBasicParsing -SkipCertificateCheck -OutFile "{jpn_file}" -TimeoutSec 30
-    Invoke-WebRequest -Uri "{jpn_vert_url}" -UseBasicParsing -SkipCertificateCheck -OutFile "{jpn_vert_file}" -TimeoutSec 30
-    exit 0
-}} catch {{
-    Write-Host $_.Exception.Message
-    exit 1
-}}
+Invoke-WebRequest -Uri "{jpn_url}" -UseBasicParsing -SkipCertificateCheck -OutFile "{staged_jpn}" -TimeoutSec 60
+Invoke-WebRequest -Uri "{jpn_vert_url}" -UseBasicParsing -SkipCertificateCheck -OutFile "{staged_jpn_vert}" -TimeoutSec 60
 '''
-        result = subprocess.run(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-            check=False, capture_output=True, text=True, timeout=60
-        )
-        jpn_ok = file_ok(jpn_file)
-        jpn_vert_ok = file_ok(jpn_vert_file)
-        if jpn_ok and jpn_vert_ok:
-            log("Japanese language packs downloaded successfully! (Attempt 3 - PowerShell)")
-            log("Sekiro detection is now fully supported!")
-            return True
-        elif jpn_ok:
-            log("jpn.traineddata downloaded successfully! (Attempt 3)")
-            log("Note: jpn_vert.traineddata failed, but basic support is available")
-            return True
-        else:
-            if result.stderr:
-                log(f"PowerShell error: {result.stderr}")
-    except Exception as e:
-        log(f"Attempt 3 (PowerShell) failed: {e}")
+            subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                check=False, capture_output=True, text=True, timeout=90
+            )
+            if file_ok(staged_jpn) and file_ok(staged_jpn_vert):
+                log("Downloaded to temp successfully (Attempt 3 - PowerShell)")
+        except Exception as e:
+            log(f"Attempt 3 (PowerShell) failed: {e}")
 
-    # Attempt 4: Elevated PowerShell (prompts UAC) with SkipCertificateCheck for permission issues
+    # If still missing staged files, bail out
+    if not file_ok(staged_jpn):
+        log("Japanese pack auto-download failed (could not download jpn.traineddata).")
+        log("Download from:")
+        log("  https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata")
+        log("  https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata")
+        log(f"Save to: {tessdata_dir}")
+        return False
+
+    # Copy phase: try direct copy if writable, else elevated copy
+    if has_write_access(tessdata_dir):
+        try:
+            shutil.copy2(staged_jpn, jpn_file)
+            if file_ok(staged_jpn_vert):
+                shutil.copy2(staged_jpn_vert, jpn_vert_file)
+            log("Japanese language packs installed (direct copy). Sekiro detection is now fully supported!")
+            return True
+        except Exception as e:
+            log(f"Direct copy failed: {e}")
+
+    # Attempt elevated copy (no network, just file copy)
     try:
-        log("Attempt 4: Downloading with elevated PowerShell (UAC prompt, bypassing certificate check)...")
-        import tempfile
+        log("Attempting elevated copy (UAC prompt) to install Japanese packs...")
         ps_script = f"""
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$dest = '{tessdata_dir}'
-Invoke-WebRequest -Uri "{jpn_url}" -UseBasicParsing -SkipCertificateCheck -OutFile "$dest\\jpn.traineddata" -TimeoutSec 60
-Invoke-WebRequest -Uri "{jpn_vert_url}" -UseBasicParsing -SkipCertificateCheck -OutFile "$dest\\jpn_vert.traineddata" -TimeoutSec 60
+Copy-Item -Path "{staged_jpn}" -Destination "{jpn_file}" -Force
 """
+        if file_ok(staged_jpn_vert):
+            ps_script += f'\nCopy-Item -Path "{staged_jpn_vert}" -Destination "{jpn_vert_file}" -Force\n'
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=".ps1", mode="w", encoding="utf-8") as tmp:
             tmp.write(ps_script)
             ps1_path = tmp.name
-        # Launch elevated PowerShell to execute the script
+
         elevated_cmd = [
             "powershell",
             "-NoProfile",
@@ -448,20 +461,18 @@ Invoke-WebRequest -Uri "{jpn_vert_url}" -UseBasicParsing -SkipCertificateCheck -
         ]
         subprocess.run(elevated_cmd, check=False, capture_output=True, text=True, timeout=120)
         jpn_ok = file_ok(jpn_file)
-        jpn_vert_ok = file_ok(jpn_vert_file)
+        jpn_vert_ok = file_ok(jpn_vert_file) or not file_ok(staged_jpn_vert)
         if jpn_ok and jpn_vert_ok:
-            log("Japanese language packs downloaded successfully! (Attempt 4 - Elevated PowerShell)")
-            log("Sekiro detection is now fully supported!")
+            log("Japanese language packs installed via elevated copy. Sekiro detection is now fully supported!")
             return True
         elif jpn_ok:
-            log("jpn.traineddata downloaded successfully! (Attempt 4)")
-            log("Note: jpn_vert.traineddata failed, but basic support is available")
+            log("jpn.traineddata installed via elevated copy. (jpn_vert missing but basic support available)")
             return True
     except Exception as e:
-        log(f"Attempt 4 (Elevated PowerShell) failed: {e}")
+        log(f"Elevated copy failed: {e}")
 
     # Final fallback: guide manual download
-    log("Japanese pack auto-download failed. Manual download recommended for Sekiro.")
+    log("Japanese pack auto-install failed (likely UAC denied). Manual download recommended for Sekiro.")
     log("Download from:")
     log("  https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata")
     log("  https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata")
