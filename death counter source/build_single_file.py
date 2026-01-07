@@ -12,15 +12,14 @@ from pathlib import Path
 
 # Files to include in the distribution
 FILES_TO_INCLUDE = [
-    "1multi_game_death_counter.py",
-    "1death_counter_gui.py",
-    "1switch_game_manual.py",
-    "1games_config.json",
-    "1START_DEATH_COUNTER.bat",
-    "1STOP_DEATH_COUNTER.bat",
-    "1install_dependencies.bat",
-    "1README.md",
-    # New helper scripts (without "1" prefix - they're already in final form)
+    "multi_game_death_counter.py",
+    "death_counter_gui.py",
+    "switch_game_manual.py",
+    "games_config.json",
+    "START_DEATH_COUNTER.bat",
+    "STOP_DEATH_COUNTER.bat",
+    "install_dependencies.bat",
+    "README.md",
     "change_monitor_id.py",
     "capture_debug_once.py",
     "CHANGE_MONITOR_ID.bat",
@@ -31,26 +30,8 @@ FILES_TO_INCLUDE = [
     "RESET_DEATH_COUNTER.bat",  # Batch file to run reset script
 ]
 
-# Target filenames (without the "1" prefix)
-TARGET_NAMES = {
-    "1multi_game_death_counter.py": "multi_game_death_counter.py",
-    "1death_counter_gui.py": "death_counter_gui.py",
-    "1switch_game_manual.py": "switch_game_manual.py",
-    "1games_config.json": "games_config.json",
-    "1START_DEATH_COUNTER.bat": "START_DEATH_COUNTER.bat",
-    "1STOP_DEATH_COUNTER.bat": "STOP_DEATH_COUNTER.bat",
-    "1install_dependencies.bat": "install_dependencies.bat",
-    "1README.md": "README.md",
-    # New helper scripts (keep same name)
-    "change_monitor_id.py": "change_monitor_id.py",
-    "capture_debug_once.py": "capture_debug_once.py",
-    "CHANGE_MONITOR_ID.bat": "CHANGE_MONITOR_ID.bat",
-    "CAPTURE_DEBUG.bat": "CAPTURE_DEBUG.bat",
-    "deathcounteraction.cs": "deathcounteraction.cs",
-    "test_daemon_start.py": "test_daemon_start.py",
-    "reset_death_counter.py": "reset_death_counter.py",
-    "RESET_DEATH_COUNTER.bat": "RESET_DEATH_COUNTER.bat",
-}
+# Target filenames are identical now (no prefix mapping needed)
+TARGET_NAMES = {name: name for name in FILES_TO_INCLUDE}
 
 def read_file_binary(filepath):
     """Read a file as binary."""
