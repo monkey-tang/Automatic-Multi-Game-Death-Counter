@@ -14,9 +14,16 @@ import time
 import ctypes
 import json
 import traceback
+import subprocess
 import psutil
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
+
+# Windows API types for window detection
+try:
+    from ctypes import wintypes
+except ImportError:
+    wintypes = None
 
 import cv2
 import numpy as np
@@ -40,6 +47,7 @@ def get_base_dir():
 BASE_DIR = get_base_dir()
 CONFIG_FILE = os.path.join(BASE_DIR, "games_config.json")
 LOCK_FILE = os.path.join(BASE_DIR, "daemon.lock")
+READY_FILE = os.path.join(BASE_DIR, "daemon.ready")  # Signal file created after full initialization
 STOP_FILE = os.path.join(BASE_DIR, "STOP")
 
 DEBUG_RAW = os.path.join(BASE_DIR, "debug_capture_raw.png")
@@ -52,7 +60,35 @@ CURRENT_GAME_TXT = os.path.join(BASE_DIR, "current_game.txt")  # Current game na
 CURRENT_DEATHS_TXT = os.path.join(BASE_DIR, "current_deaths.txt")  # Current game death count for Streamer.bot
 TOTAL_DEATHS_TXT = os.path.join(BASE_DIR, "total_deaths.txt")  # Total deaths across all games for Streamer.bot
 
-TESSERACT_EXE = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# Find Tesseract executable - check common locations
+def find_tesseract_executable():
+    """Find Tesseract OCR executable in common installation locations."""
+    # Common Tesseract installation paths
+    common_paths = [
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        os.path.join(os.getenv('ProgramFiles', r'C:\Program Files'), 'Tesseract-OCR', 'tesseract.exe'),
+        os.path.join(os.getenv('ProgramFiles(x86)', r'C:\Program Files (x86)'), 'Tesseract-OCR', 'tesseract.exe'),
+    ]
+    
+    # Check if tesseract is in PATH
+    try:
+        result = subprocess.run(['tesseract', '--version'], 
+                              capture_output=True, text=True, timeout=2)
+        if result.returncode == 0:
+            return 'tesseract'  # Use command name if in PATH
+    except:
+        pass
+    
+    # Check common paths
+    for path in common_paths:
+        if os.path.exists(path):
+            return path
+    
+    # Default fallback
+    return r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+TESSERACT_EXE = find_tesseract_executable()
 pytesseract.pytesseract.tesseract_cmd = TESSERACT_EXE
 
 # Default settings
@@ -156,9 +192,18 @@ def move_console_to_top_right():
 def log(msg: str):
     os.makedirs(BASE_DIR, exist_ok=True)
     ts = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-    with open(DEBUG_LOG, "a", encoding="utf-8") as f:
-        f.write(f"{ts} {msg}\n")
-    print(msg)  # Also print to console
+    try:
+        with open(DEBUG_LOG, "a", encoding="utf-8", errors='replace') as f:
+            f.write(f"{ts} {msg}\n")
+        # Print to console with error handling for Unicode
+        try:
+            print(msg)
+        except UnicodeEncodeError:
+            # If console can't handle Unicode, print ASCII version
+            print(msg.encode('ascii', errors='replace').decode('ascii'))
+    except Exception as e:
+        # Silently fail if we can't write to log
+        pass
 
 
 # =========================
@@ -202,6 +247,7 @@ def save_config(config: Dict):
 # LOCK HANDLING
 # =========================
 def acquire_lock() -> bool:
+    """Create lock file immediately - this is the first thing we do."""
     os.makedirs(BASE_DIR, exist_ok=True)
     if os.path.exists(LOCK_FILE):
         try:
@@ -212,8 +258,14 @@ def acquire_lock() -> bool:
             log("LOCK EXISTS: daemon.lock present. Exiting to avoid duplicates.")
         return False
     try:
+        # Create lock file immediately - before any other initialization
         with open(LOCK_FILE, "w", encoding="utf-8") as f:
             f.write(str(os.getpid()))
+        # Force file system flush
+        import sys
+        sys.stdout.flush()
+        sys.stderr.flush()
+        log(f"LOCK CREATED: daemon.lock created with PID {os.getpid()}")
         return True
     except Exception as e:
         log(f"LOCK ERROR: {e}")
@@ -224,6 +276,8 @@ def release_lock():
     try:
         if os.path.exists(LOCK_FILE):
             os.remove(LOCK_FILE)
+        if os.path.exists(READY_FILE):
+            os.remove(READY_FILE)
     except Exception:
         pass
 
@@ -336,6 +390,110 @@ def get_running_processes() -> List[str]:
     return processes
 
 
+def get_game_process(game_config: Dict) -> Optional[psutil.Process]:
+    """Get the process object for the current game."""
+    process_names = game_config.get("process_names", [])
+    if not process_names:
+        return None
+    
+    try:
+        for proc in psutil.process_iter(['name', 'pid']):
+            try:
+                proc_name = proc.info['name'].lower()
+                if proc_name.endswith('.exe'):
+                    proc_name = proc_name[:-4]
+                
+                for game_proc_name in process_names:
+                    normalized = game_proc_name.lower()
+                    if normalized.endswith('.exe'):
+                        normalized = normalized[:-4]
+                    
+                    if normalized == proc_name:
+                        return psutil.Process(proc.info['pid'])
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+    except Exception as e:
+        log(f"Error finding game process: {e}")
+    return None
+
+
+def get_window_rect(process: psutil.Process) -> Optional[dict]:
+    """Get the window rectangle for a process using Windows API."""
+    try:
+        # Windows API constants
+        GW_OWNER = 4
+        
+        # Find window by process ID
+        windows = []
+        
+        def enum_windows_callback(hwnd, lParam):
+            try:
+                if ctypes.windll.user32.IsWindowVisible(hwnd):
+                    pid = ctypes.c_ulong()
+                    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    if pid.value == process.pid:
+                        # Check if it's not a child window
+                        owner = ctypes.windll.user32.GetWindow(hwnd, GW_OWNER)
+                        if owner == 0:
+                            windows.append(hwnd)
+            except:
+                pass
+            return True
+        
+        # Define callback type
+        EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+        callback = EnumWindowsProc(enum_windows_callback)
+        
+        # Find all windows for this process
+        ctypes.windll.user32.EnumWindows(callback, None)
+        
+        if not windows:
+            return None
+        
+        # Use the first (main) window
+        hwnd = windows[0]
+        
+        # Get window rectangle
+        class RECT(ctypes.Structure):
+            _fields_ = [("left", ctypes.c_long),
+                        ("top", ctypes.c_long),
+                        ("right", ctypes.c_long),
+                        ("bottom", ctypes.c_long)]
+        
+        rect = RECT()
+        ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        
+        return {
+            'left': rect.left,
+            'top': rect.top,
+            'right': rect.right,
+            'bottom': rect.bottom,
+            'width': rect.right - rect.left,
+            'height': rect.bottom - rect.top
+        }
+    except Exception:
+        # Silently fail - will fall back to configured monitor
+        return None
+
+
+def find_monitor_for_window(window_rect: dict, monitors: List[dict]) -> Optional[int]:
+    """Find which monitor contains the center of the window."""
+    if not window_rect:
+        return None
+    
+    # Get window center
+    center_x = window_rect['left'] + window_rect['width'] // 2
+    center_y = window_rect['top'] + window_rect['height'] // 2
+    
+    # Find monitor that contains this point
+    for i, mon in enumerate(monitors):
+        if (mon['left'] <= center_x < mon['left'] + mon['width'] and
+            mon['top'] <= center_y < mon['top'] + mon['height']):
+            return i
+    
+    return None
+
+
 def detect_game(games: Dict) -> Optional[str]:
     """
     Auto-detect which game is currently running by checking process names.
@@ -367,15 +525,24 @@ def detect_game(games: Dict) -> Optional[str]:
 # =========================
 # IMAGE PROCESSING
 # =========================
-def grab_region(sct: mss, monitor_index: int, region: dict) -> Image.Image:
-    """Capture a region from the specified monitor."""
-    # mss uses 0-indexed monitors (0 is all monitors, 1+ are individual)
-    # But we'll use 1-indexed for user convenience
-    actual_index = monitor_index if monitor_index == 0 else monitor_index
+def grab_region(sct: mss, monitor_index: int, region: dict, game_config: Dict = None) -> Image.Image:
+    """
+    Capture a region from the specified monitor.
+    Note: Monitor auto-detection is now handled in the main loop with throttling
+    to prevent race conditions. This function just uses the provided monitor_index.
+    """
     
-    if actual_index >= len(sct.monitors):
-        log(f"WARNING: Monitor {monitor_index} not found. Using monitor 1.")
+    # mss uses 0-indexed monitors (0 is all monitors, 1+ are individual)
+    # Validate monitor index before using it
+    num_monitors = len(sct.monitors)
+    max_valid_index = num_monitors - 1
+    
+    if monitor_index < 0 or monitor_index > max_valid_index:
+        # Invalid monitor index - use monitor 1 (primary) as fallback
+        log(f"WARNING: Monitor {monitor_index} is invalid (valid range: 0-{max_valid_index}). Using monitor 1.")
         actual_index = 1
+    else:
+        actual_index = monitor_index
     
     mon = sct.monitors[actual_index]
     abs_region = {
@@ -481,9 +648,25 @@ def main_loop():
     enable_dpi_awareness()
     move_console_to_top_right()  # Move console window out of capture area
     
-    if not os.path.exists(TESSERACT_EXE):
+    # Check if Tesseract is available (either as file path or command)
+    tesseract_available = False
+    if TESSERACT_EXE == 'tesseract':
+        # Check if command is available
+        try:
+            result = subprocess.run(['tesseract', '--version'], 
+                                  capture_output=True, text=True, timeout=2)
+            tesseract_available = (result.returncode == 0)
+        except:
+            tesseract_available = False
+    else:
+        tesseract_available = os.path.exists(TESSERACT_EXE)
+    
+    if not tesseract_available:
         log(f"ERROR: Tesseract not found at: {TESSERACT_EXE}")
-        log("Please install Tesseract OCR or update TESSERACT_EXE path.")
+        log("Please install Tesseract OCR from: https://github.com/UB-Mannheim/tesseract/wiki")
+        log("Or ensure Tesseract is in your PATH.")
+        log("Daemon will exit - Tesseract is required.")
+        # Don't create ready file - daemon is not ready
         return
     
     config = load_config()
@@ -492,6 +675,65 @@ def main_loop():
     
     if not games:
         log("ERROR: No games configured!")
+        log("Daemon will exit - games configuration is required.")
+        # Don't create ready file - daemon is not ready
+        return
+    
+    # Create ready file EARLY - right after critical checks pass
+    # This ensures GUI knows daemon is ready even if something later hangs
+    # DO THIS BEFORE ANY LOGGING to avoid encoding issues
+    ready_file_created = False
+    try:
+        # Ensure directory exists
+        os.makedirs(BASE_DIR, exist_ok=True)
+        # Create ready file
+        ready_file_path = os.path.abspath(READY_FILE)  # Use absolute path
+        with open(ready_file_path, "w", encoding="utf-8") as f:
+            f.write(str(os.getpid()))
+            f.flush()  # Force write to disk
+        # Force OS to sync file to disk
+        import sys
+        sys.stdout.flush()
+        sys.stderr.flush()
+        # Verify it was created
+        if os.path.exists(ready_file_path):
+            ready_file_created = True
+            # Now safe to log (file is already created)
+            try:
+                log("Ready file created EARLY - critical checks passed.")
+            except:
+                pass  # If logging fails, that's OK - file is created
+            print(f"Ready file created: {ready_file_path}")
+            print(f"Ready file absolute path: {os.path.abspath(ready_file_path)}")
+        else:
+            print(f"WARNING: Ready file write succeeded but file doesn't exist!")
+            print(f"Attempted path: {ready_file_path}")
+            print(f"BASE_DIR: {BASE_DIR}")
+            print(f"BASE_DIR exists: {os.path.exists(BASE_DIR)}")
+    except Exception as e:
+        error_msg = f"CRITICAL: Could not create ready file: {e}"
+        # Try to log, but don't fail if logging fails
+        try:
+            log(error_msg)
+        except:
+            pass
+        print(error_msg)
+        # Write to startup error file
+        try:
+            STARTUP_ERROR_FILE = os.path.join(BASE_DIR, "daemon_startup_error.txt")
+            with open(STARTUP_ERROR_FILE, "w", encoding="utf-8") as f:
+                f.write(f"Failed to create ready file: {e}\n")
+                f.write(f"BASE_DIR: {BASE_DIR}\n")
+                f.write(f"READY_FILE: {READY_FILE}\n")
+                f.write(f"BASE_DIR exists: {os.path.exists(BASE_DIR)}\n")
+                f.write(f"BASE_DIR writable: {os.access(BASE_DIR, os.W_OK)}\n")
+        except:
+            pass
+        # Don't continue - ready file is critical
+        return
+    
+    if not ready_file_created:
+        print("ERROR: Ready file was not created successfully!")
         return
     
     state = load_state()
@@ -531,12 +773,39 @@ def main_loop():
     log(f"Current Deaths - Total: {state['total_deaths']}, {current_game_name}: {state['game_deaths'].get(current_game_name, 0)}")
     log("=" * 60)
     
+    # Ready file already created above - just verify it exists
+    if os.path.exists(READY_FILE):
+        log(f"READY_FILE verified: {READY_FILE}")
+    else:
+        log(f"WARNING: READY_FILE missing, recreating...")
+        try:
+            with open(READY_FILE, "w", encoding="utf-8") as f:
+                f.write(str(os.getpid()))
+            log(f"READY_FILE recreated: {READY_FILE}")
+        except Exception as e:
+            log(f"ERROR: Could not recreate ready file: {e}")
+    
+    # Now enter mss context - if this hangs, ready file already exists
     with mss() as sct:
-        log(f"Available monitors: {len(sct.monitors)}")
+        num_monitors = len(sct.monitors)
+        log(f"Available monitors: {num_monitors}")
         for i, mon in enumerate(sct.monitors):
             log(f"  Monitor {i}: {mon['width']}x{mon['height']} at ({mon['left']}, {mon['top']})")
         
+        # Get configured monitor index and validate it
         monitor_index = game_config.get("monitor_index", settings["monitor_index"])
+        
+        # Validate monitor index - mss uses 0-indexed where 0 is "all monitors"
+        # Valid indices are 0 (all) and 1 to (num_monitors-1) for individual monitors
+        max_valid_index = num_monitors - 1
+        if monitor_index < 0 or monitor_index > max_valid_index:
+            log(f"WARNING: Configured monitor_index {monitor_index} is invalid (valid range: 0-{max_valid_index}). Using monitor 1.")
+            monitor_index = 1  # Default to monitor 1 (primary display)
+            # Update the config to save the corrected value
+            game_config["monitor_index"] = monitor_index
+            config["games"][current_game_name] = game_config
+            save_config(config)
+        
         region = game_config.get("region", {})
         keywords = game_config.get("keywords", ["YOUDIED"])
         tesseract_config = game_config.get("tesseract_config", "--oem 3 --psm 7")
@@ -544,6 +813,12 @@ def main_loop():
         # Auto-detection check interval (check every 30 ticks = ~9 seconds at 0.3s tick)
         auto_detect_interval = 30
         last_auto_detect_tick = 0
+        last_monitor_detect_tick = 0
+        cached_monitor_index = monitor_index  # Cache the detected monitor
+        
+        # Flag to track if daemon has fully started (only run monitor detection after this)
+        daemon_started = False
+        startup_ticks = 10  # Wait 10 ticks (~3 seconds) after initialization before starting monitor detection
         
         while True:
             if os.path.exists(STOP_FILE):
@@ -553,11 +828,16 @@ def main_loop():
             state["tick"] += 1
             now = time.time()
             
+            # Mark daemon as started after initial startup period
+            if not daemon_started and state["tick"] >= startup_ticks:
+                daemon_started = True
+                log("Monitor auto-detection enabled.")
+            
             # Auto-detect game periodically
             if state["tick"] - last_auto_detect_tick >= auto_detect_interval:
                 detected_game = detect_game(games)
                 if detected_game and detected_game in games and detected_game != current_game_name:
-                    log(f"🔄 Game changed detected: {current_game_name} → {detected_game}")
+                    log(f"Game changed detected: {current_game_name} -> {detected_game}")
                     current_game_name = detected_game
                     game_config = games[current_game_name]
                     state["current_game"] = current_game_name
@@ -572,17 +852,42 @@ def main_loop():
                     write_chat_info(current_game_name, game_deaths)
                     # Write updated total deaths
                     write_total_deaths(state.get("total_deaths", 0))
-                    # Update monitor and region settings
+                    # Update monitor and region settings - validate monitor index
                     monitor_index = game_config.get("monitor_index", settings["monitor_index"])
+                    max_valid_index = len(sct.monitors) - 1
+                    if monitor_index < 0 or monitor_index > max_valid_index:
+                        log(f"WARNING: Monitor {monitor_index} invalid for {current_game_name} (valid: 0-{max_valid_index}). Using monitor 1.")
+                        monitor_index = 1
+                        game_config["monitor_index"] = monitor_index
+                        config["games"][current_game_name] = game_config
+                        save_config(config)
+                    cached_monitor_index = monitor_index  # Reset cache when game changes
                     region = game_config.get("region", {})
                     keywords = game_config.get("keywords", ["YOUDIED"])
                     tesseract_config = game_config.get("tesseract_config", "--oem 3 --psm 7")
                     log(f"Switched to: {current_game_name} | Monitor: {monitor_index} | Region: {region} | Deaths: {game_deaths}")
                 last_auto_detect_tick = state["tick"]
             
+            # Auto-detect monitor periodically (throttled to prevent race conditions)
+            # Only run after daemon has fully started to avoid race conditions during initialization
+            if daemon_started and state["tick"] - last_monitor_detect_tick >= auto_detect_interval:
+                try:
+                    game_process = get_game_process(game_config)
+                    if game_process:
+                        window_rect = get_window_rect(game_process)
+                        if window_rect:
+                            detected_monitor = find_monitor_for_window(window_rect, sct.monitors)
+                            if detected_monitor is not None and detected_monitor != cached_monitor_index:
+                                log(f"Auto-detected monitor {detected_monitor} for game window (was using {cached_monitor_index})")
+                                cached_monitor_index = detected_monitor
+                except Exception:
+                    # Fall back to configured monitor if auto-detection fails
+                    pass
+                last_monitor_detect_tick = state["tick"]
+            
             try:
-                # Capture region
-                img_rgb = grab_region(sct, monitor_index, region)
+                # Capture region using cached monitor index (no EnumWindows call here)
+                img_rgb = grab_region(sct, cached_monitor_index, region)
                 
                 # Save debug images periodically
                 save_debug = (state["tick"] % settings["debug_every_ticks"] == 0)
@@ -630,7 +935,7 @@ def main_loop():
                     write_chat_info(current_game_name, game_deaths)
                     # Write updated total deaths
                     write_total_deaths(state["total_deaths"])
-                    log(f"💀 DEATH COUNTED → Total: {state['total_deaths']} | "
+                    log(f"DEATH COUNTED -> Total: {state['total_deaths']} | "
                         f"{current_game_name}: {state['game_deaths'][current_game_name]}")
                 
                 # Save state periodically (every 10 ticks to reduce I/O)
@@ -648,18 +953,70 @@ def main_loop():
 # ENTRYPOINT
 # =========================
 if __name__ == "__main__":
+    # Create lock file FIRST - before anything else
     if not acquire_lock():
         print("Another instance is already running. Exiting.")
         raise SystemExit(0)
     
+    # Create a startup error file to capture any immediate errors
+    STARTUP_ERROR_FILE = os.path.join(BASE_DIR, "daemon_startup_error.txt")
     try:
+        with open(STARTUP_ERROR_FILE, "w") as f:
+            f.write("")  # Clear any old errors
+    except:
+        pass
+    
+    # Log startup immediately - use both log() and print() for visibility
+    startup_msg = "=" * 70 + "\nDEATH COUNTER DAEMON STARTING\n" + "=" * 70
+    print(startup_msg)
+    log(startup_msg)
+    log(f"PID: {os.getpid()}")
+    log(f"BASE_DIR: {BASE_DIR}")
+    log(f"LOCK_FILE: {LOCK_FILE}")
+    log(f"READY_FILE: {READY_FILE}")
+    log(f"Python: {sys.executable}")
+    log(f"Script: {__file__}")
+    
+    # Also print critical info to stdout (visible in console)
+    print(f"PID: {os.getpid()}")
+    print(f"BASE_DIR: {BASE_DIR}")
+    print(f"LOCK_FILE: {LOCK_FILE}")
+    print(f"READY_FILE: {READY_FILE}")
+    
+    initialization_complete = False
+    try:
+        # Small delay to ensure lock file is written to disk
+        time.sleep(0.1)
+        print("Starting main_loop()...")
+        log("Starting main_loop()...")
+        # Call main_loop and track if it completes initialization
         main_loop()
+        initialization_complete = True
+        print("main_loop() completed normally")
+        log("main_loop() completed normally")
     except KeyboardInterrupt:
+        print("Daemon stopped (KeyboardInterrupt).")
         log("Daemon stopped (KeyboardInterrupt).")
     except Exception as e:
-        log("FATAL ERROR: " + str(e))
-        log(traceback.format_exc())
+        error_msg = f"FATAL ERROR: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
+        log(error_msg)
+        # Write error to startup error file
+        try:
+            with open(STARTUP_ERROR_FILE, "w", encoding="utf-8") as f:
+                f.write(error_msg)
+        except:
+            pass
+        # If we got here, initialization failed - remove ready file if it exists
+        if os.path.exists(READY_FILE):
+            try:
+                os.remove(READY_FILE)
+                print("Removed ready file due to error")
+            except:
+                pass
     finally:
+        print("Releasing lock and shutting down...")
         release_lock()
         log("Daemon shutdown complete.")
+        print("Daemon shutdown complete.")
 
