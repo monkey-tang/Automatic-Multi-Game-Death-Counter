@@ -30,7 +30,9 @@ BASE_DIR = get_base_dir()
 CONFIG_FILE = os.path.join(BASE_DIR, "games_config.json")
 STATE_JSON = os.path.join(BASE_DIR, "death_state.json")
 LOCK_FILE = os.path.join(BASE_DIR, "daemon.lock")
+READY_FILE = os.path.join(BASE_DIR, "daemon.ready")  # Signal file created after full initialization
 STOP_FILE = os.path.join(BASE_DIR, "STOP")
+GUI_DEBUG_LOG = os.path.join(BASE_DIR, "gui_debug.log")  # Debug log for GUI
 # Try both possible script names (with and without "1" prefix)
 SCRIPT_PATH = os.path.join(BASE_DIR, "1multi_game_death_counter.py")
 if not os.path.exists(SCRIPT_PATH):
@@ -284,59 +286,353 @@ class DeathCounterGUI:
             messagebox.showerror("Error", f"Failed to switch game: {e}")
     
     def is_daemon_running(self):
-        """Check if daemon is running."""
-        return os.path.exists(LOCK_FILE)
+        """Check if daemon is running - check both lock file and process."""
+        # Check lock file
+        if not os.path.exists(LOCK_FILE):
+            return False
+        
+        # Verify the process in the lock file is actually running
+        try:
+            with open(LOCK_FILE, "r") as f:
+                pid_str = f.read().strip()
+            if pid_str:
+                pid = int(pid_str)
+                # Check if process exists
+                try:
+                    import psutil
+                    return psutil.pid_exists(pid)
+                except:
+                    # Fallback: use tasklist on Windows
+                    try:
+                        result = subprocess.run(
+                            ["tasklist", "/FI", f"PID eq {pid}"],
+                            capture_output=True,
+                            text=True,
+                            timeout=2
+                        )
+                        return f"{pid}" in result.stdout
+                    except:
+                        # If we can't check, assume it's running if lock file exists
+                        return True
+        except:
+            # If we can't read the lock file, assume it's not running
+            return False
+        
+        return True
     
     def find_python_executable(self):
-        """Find Python executable, checking PATH and common installation locations."""
-        # First, try commands in PATH
-        for python_name in ['python', 'python3', 'py']:
-            try:
-                result = subprocess.run([python_name, '--version'], 
-                                      capture_output=True, text=True, timeout=2)
-                if result.returncode == 0:
-                    # Verify it can actually run Python code
-                    test_result = subprocess.run([python_name, '-c', 'import sys; print(sys.version)'],
-                                                capture_output=True, text=True, timeout=2)
-                    if test_result.returncode == 0:
-                        return python_name
-            except:
-                continue
+        """Find Python executable, checking PATH and common installation locations.
+        Comprehensive search for general public use."""
+        # If running as a script (not frozen), use sys.executable
+        if not getattr(sys, 'frozen', False):
+            return sys.executable
         
-        # If not in PATH, check common installation locations
-        common_paths = [
-            r"C:\Python312\python.exe",
-            r"C:\Python311\python.exe",
-            r"C:\Python310\python.exe",
-            r"C:\Python39\python.exe",
-            r"C:\Python38\python.exe",
-            r"C:\Program Files\Python312\python.exe",
-            r"C:\Program Files\Python311\python.exe",
-            r"C:\Program Files\Python310\python.exe",
-            r"C:\Program Files\Python39\python.exe",
-            r"C:\Program Files\Python38\python.exe",
-            os.path.expanduser(r"~\AppData\Local\Programs\Python\Python312\python.exe"),
-            os.path.expanduser(r"~\AppData\Local\Programs\Python\Python311\python.exe"),
-            os.path.expanduser(r"~\AppData\Local\Programs\Python\Python310\python.exe"),
-        ]
+        # If running as PyInstaller exe, we need to find Python
+        # Method 1: Try 'python' command (if in PATH) - most reliable
+        try:
+            result = subprocess.run(['python', '--version'], 
+                                  capture_output=True, text=True, timeout=2)
+            if result.returncode == 0:
+                return 'python'
+        except:
+            pass
         
-        for python_path in common_paths:
-            if os.path.exists(python_path):
+        # Method 2: Try 'py' launcher (Windows Python launcher) - also reliable
+        try:
+            result = subprocess.run(['py', '--version'], 
+                                  capture_output=True, text=True, timeout=2)
+            if result.returncode == 0:
+                return 'py'
+        except:
+            pass
+        
+        # Method 3: Search Windows Registry for Python installations
+        try:
+            import winreg
+            # Check both 32-bit and 64-bit registry
+            for arch in [winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY]:
                 try:
-                    result = subprocess.run([python_path, '--version'], 
-                                          capture_output=True, text=True, timeout=2)
-                    if result.returncode == 0:
-                        return python_path
+                    # Check HKEY_LOCAL_MACHINE
+                    key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 
+                                        r"SOFTWARE\Python\PythonCore", 0,
+                                        winreg.KEY_READ | arch)
+                    try:
+                        # Get all installed Python versions
+                        i = 0
+                        while True:
+                            try:
+                                version = winreg.EnumKey(key, i)
+                                install_path_key = winreg.OpenKey(key, f"{version}\\InstallPath")
+                                try:
+                                    install_path = winreg.QueryValueEx(install_path_key, "")[0]
+                                    python_exe = os.path.join(install_path, "python.exe")
+                                    if os.path.exists(python_exe):
+                                        winreg.CloseKey(install_path_key)
+                                        winreg.CloseKey(key)
+                                        return python_exe
+                                    winreg.CloseKey(install_path_key)
+                                except:
+                                    pass
+                                i += 1
+                            except OSError:
+                                break
+                        winreg.CloseKey(key)
+                    except:
+                        try:
+                            winreg.CloseKey(key)
+                        except:
+                            pass
                 except:
-                    continue
+                    pass
+        except:
+            pass
+        
+        # Method 4: Search common installation locations
+        userprofile = os.getenv('USERPROFILE', '')
+        programfiles = os.getenv('ProgramFiles', r'C:\Program Files')
+        programfiles_x86 = os.getenv('ProgramFiles(x86)', r'C:\Program Files (x86)')
+        
+        search_paths = []
+        
+        # User AppData locations (most common for Python 3.8+)
+        if userprofile:
+            appdata_local = os.path.join(userprofile, r"AppData\Local\Programs\Python")
+            if os.path.exists(appdata_local):
+                # Search all Python versions in this directory
+                try:
+                    for item in os.listdir(appdata_local):
+                        python_dir = os.path.join(appdata_local, item)
+                        if os.path.isdir(python_dir):
+                            python_exe = os.path.join(python_dir, "python.exe")
+                            if os.path.exists(python_exe):
+                                search_paths.append(python_exe)
+                except:
+                    pass
+        
+        # Common root-level Python installations
+        for version in ['312', '311', '310', '39', '38']:
+            search_paths.extend([
+                os.path.join(r"C:\Python" + version, "python.exe"),
+                os.path.join(programfiles, f"Python{version}", "python.exe"),
+                os.path.join(programfiles_x86, f"Python{version}", "python.exe"),
+            ])
+        
+        # Check all collected paths
+        for path in search_paths:
+            if os.path.exists(path):
+                return path
+        
+        # Method 5: Recursive search in Program Files (last resort, slower)
+        try:
+            for root_dir in [programfiles, programfiles_x86]:
+                if os.path.exists(root_dir):
+                    for root, dirs, files in os.walk(root_dir):
+                        # Limit depth to avoid slow searches
+                        depth = root[len(root_dir):].count(os.sep)
+                        if depth > 2:  # Max 2 levels deep
+                            dirs[:] = []  # Don't recurse deeper
+                            continue
+                        
+                        if 'python.exe' in files:
+                            python_exe = os.path.join(root, 'python.exe')
+                            # Verify it's actually Python
+                            try:
+                                result = subprocess.run([python_exe, '--version'], 
+                                                      capture_output=True, timeout=1)
+                                if result.returncode == 0:
+                                    return python_exe
+                            except:
+                                pass
+        except:
+            pass
+        
+        return None
+    
+    def is_python_version_compatible(self, python_exe):
+        """Check if Python version is compatible (3.8-3.13)."""
+        try:
+            # Try to get version without hanging - use a very short timeout
+            result = subprocess.run(
+                [python_exe, '--version'],
+                capture_output=True,
+                text=True,
+                timeout=1
+            )
+            if result.returncode == 0:
+                version_str = result.stdout.strip() or result.stderr.strip()
+                # Parse version (e.g., "Python 3.12.0" -> (3, 12))
+                import re
+                match = re.search(r'(\d+)\.(\d+)', version_str)
+                if match:
+                    major = int(match.group(1))
+                    minor = int(match.group(2))
+                    # Check if version is 3.8-3.13
+                    if major == 3 and 8 <= minor <= 13:
+                        return True
+        except:
+            pass
+        return False
+    
+    def find_python_executable_daemon(self):
+        """Find python.exe specifically (not pythonw.exe) for daemon.
+        Only returns Python versions 3.8-3.13 (compatible with dependencies)."""
+        # Try 'python' command first (should be python.exe)
+        try:
+            result = subprocess.run(['python', '--version'], 
+                                  capture_output=True, text=True, timeout=1)
+            if result.returncode == 0:
+                if self.is_python_version_compatible('python'):
+                    return 'python'
+        except:
+            pass
+        
+        # Search for python.exe in common locations
+        userprofile = os.getenv('USERPROFILE', '')
+        programfiles = os.getenv('ProgramFiles', r'C:\Program Files')
+        programfiles_x86 = os.getenv('ProgramFiles(x86)', r'C:\Program Files (x86)')
+        
+        python_versions = []  # List of (version_tuple, path) for sorting
+        
+        # User AppData locations - collect all versions and check compatibility
+        if userprofile:
+            appdata_local = os.path.join(userprofile, r"AppData\Local\Programs\Python")
+            if os.path.exists(appdata_local):
+                try:
+                    for item in os.listdir(appdata_local):
+                        python_dir = os.path.join(appdata_local, item)
+                        if os.path.isdir(python_dir):
+                            python_exe = os.path.join(python_dir, "python.exe")
+                            if os.path.exists(python_exe):
+                                # Check if version is compatible
+                                if self.is_python_version_compatible(python_exe):
+                                    # Extract version number from directory name (e.g., "Python312" -> (3, 12))
+                                    try:
+                                        version_str = item.replace("Python", "").replace("python", "").replace(".", "")
+                                        if version_str:
+                                            # Handle formats like "312", "39", "310"
+                                            if len(version_str) >= 2:
+                                                major = 3
+                                                if len(version_str) == 2:
+                                                    minor = int(version_str)
+                                                else:
+                                                    minor = int(version_str[:2])
+                                                python_versions.append(((major, minor), python_exe))
+                                    except:
+                                        # If we can't parse, check by running Python
+                                        python_versions.append(((0, 0), python_exe))
+                except:
+                    pass
+        
+        # Common root-level Python installations (3.8-3.13)
+        for major_minor in [(3, 13), (3, 12), (3, 11), (3, 10), (3, 9), (3, 8)]:
+            version_str = f"{major_minor[0]}{major_minor[1]:02d}"  # e.g., "312", "39"
+            for base_path in [
+                os.path.join(rf"C:\Python{version_str}", "python.exe"),
+                os.path.join(programfiles, f"Python{version_str}", "python.exe"),
+                os.path.join(programfiles_x86, f"Python{version_str}", "python.exe"),
+            ]:
+                if os.path.exists(base_path):
+                    if self.is_python_version_compatible(base_path):
+                        python_versions.append((major_minor, base_path))
+        
+        # Sort by version (newest first) - (3, 13) > (3, 12) > ... > (3, 8)
+        python_versions.sort(reverse=True, key=lambda x: x[0])
+        
+        # Return the newest compatible version
+        for (major, minor), path in python_versions:
+            return path
         
         return None
     
     def start_daemon(self):
         """Start the death counter daemon."""
-        if self.is_daemon_running():
-            messagebox.showinfo("Info", "Daemon is already running.")
-            return
+        # Initialize debug log at the very start - MUST be first thing
+        debug_log_created = False
+        try:
+            os.makedirs(BASE_DIR, exist_ok=True)  # Ensure directory exists
+            with open(GUI_DEBUG_LOG, "w", encoding="utf-8") as f:
+                f.write(f"{'='*70}\n")
+                f.write(f"GUI: start_daemon() called at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"GUI: BASE_DIR = {BASE_DIR}\n")
+                f.write(f"GUI: LOCK_FILE = {LOCK_FILE}\n")
+                f.write(f"GUI: READY_FILE = {READY_FILE}\n")
+                f.write(f"GUI: BASE_DIR exists: {os.path.exists(BASE_DIR)}\n")
+                f.write(f"GUI: BASE_DIR writable: {os.access(BASE_DIR, os.W_OK)}\n")
+                f.flush()  # Force write
+            debug_log_created = True
+        except Exception as e:
+            # If we can't write debug log, try to show error in messagebox
+            try:
+                messagebox.showerror("Debug Log Error", f"Could not create debug log: {e}\n\nBASE_DIR: {BASE_DIR}")
+            except:
+                pass
+        
+        # Check if daemon is running
+        try:
+            if debug_log_created:
+                with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                    f.write("GUI: Calling is_daemon_running()...\n")
+        except:
+            pass
+        
+        daemon_running_check = self.is_daemon_running()
+        
+        try:
+            if debug_log_created:
+                with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                    f.write(f"GUI: is_daemon_running() returned: {daemon_running_check}\n")
+        except:
+            pass
+        
+        if daemon_running_check:
+            try:
+                if debug_log_created:
+                    with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                        f.write("GUI: Daemon appears to be running - checking process...\n")
+            except:
+                pass
+            # Check if the process is actually running
+            try:
+                with open(LOCK_FILE, "r") as f:
+                    pid_str = f.read().strip()
+                if pid_str:
+                    pid = int(pid_str)
+                    # Check if process exists
+                    try:
+                        import psutil
+                        if psutil.pid_exists(pid):
+                            messagebox.showinfo("Info", f"Daemon is already running (PID: {pid}).")
+                            return
+                        else:
+                            # Stale lock file - process doesn't exist
+                            os.remove(LOCK_FILE)
+                    except:
+                        # psutil not available or other error - try tasklist
+                        try:
+                            result = subprocess.run(
+                                ["tasklist", "/FI", f"PID eq {pid}"],
+                                capture_output=True,
+                                text=True,
+                                timeout=2
+                            )
+                            if f"{pid}" in result.stdout:
+                                messagebox.showinfo("Info", f"Daemon is already running (PID: {pid}).")
+                                return
+                            else:
+                                # Stale lock file
+                                os.remove(LOCK_FILE)
+                        except:
+                            # Can't check - remove lock file to be safe
+                            try:
+                                os.remove(LOCK_FILE)
+                            except:
+                                pass
+            except:
+                # Can't read lock file - remove it
+                try:
+                    os.remove(LOCK_FILE)
+                except:
+                    pass
         
         # Check if script exists (try both possible names)
         script_path = SCRIPT_PATH
@@ -348,44 +644,504 @@ class DeathCounterGUI:
                 messagebox.showerror("Error", f"Death counter script not found.\n\nLooking for:\n{SCRIPT_PATH}\nor\n{alt_path}")
                 return
         
-        # Find Python executable
+        try:
+            if debug_log_created:
+                with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                    f.write("GUI: Finding Python executable...\n")
+                    f.write(f"GUI: sys.frozen = {getattr(sys, 'frozen', False)}\n")
+        except:
+            pass
+        
+        # Find Python executable (use python.exe, not pythonw.exe for daemon)
         python_cmd = None
-        if getattr(sys, 'frozen', False):
-            # Running as compiled exe - need to find Python
-            python_cmd = self.find_python_executable()
-            if not python_cmd:
-                messagebox.showerror("Error", "Python not found. Please install Python and add it to PATH, or restart the installer after installing Python.")
-                return
-        else:
-            # Running as script - use sys.executable
-            python_cmd = sys.executable
+        try:
+            if debug_log_created:
+                with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                    f.write("GUI: About to check sys.frozen...\n")
+                    f.flush()
+        except:
+            pass
         
         try:
-            # Start daemon in background
+            if getattr(sys, 'frozen', False):
+                # Running as compiled exe - need to find Python
+                # First try to find python.exe directly
+                python_cmd = self.find_python_executable_daemon()
+                if not python_cmd:
+                    # Fallback to regular finder
+                    python_cmd = self.find_python_executable()
+                    if not python_cmd:
+                        messagebox.showerror("Error", "Python not found. Please install Python and add it to PATH, or restart the installer after installing Python.")
+                        return
+                
+                # Ensure we're using python.exe, not pythonw.exe
+                if python_cmd.endswith('pythonw.exe') or 'pythonw' in python_cmd.lower():
+                    # Try to find python.exe in the same directory
+                    if os.path.exists(python_cmd):
+                        python_dir = os.path.dirname(python_cmd)
+                        python_exe = os.path.join(python_dir, "python.exe")
+                        if os.path.exists(python_exe):
+                            python_cmd = python_exe
+                        else:
+                            # Try replacing pythonw with python in the path
+                            python_cmd = python_cmd.replace('pythonw.exe', 'python.exe').replace('pythonw', 'python')
+            else:
+                # Running as script - use sys.executable
+                try:
+                    if debug_log_created:
+                        with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                            f.write(f"GUI: Running as script, using sys.executable\n")
+                            f.write(f"GUI: sys.executable = {sys.executable}\n")
+                            f.flush()
+                except:
+                    pass
+                python_cmd = sys.executable
+                # If it's pythonw, try to find python.exe
+                if python_cmd.endswith('pythonw.exe'):
+                    try:
+                        if debug_log_created:
+                            with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                                f.write(f"GUI: sys.executable is pythonw.exe, looking for python.exe\n")
+                                f.flush()
+                    except:
+                        pass
+                    python_dir = os.path.dirname(python_cmd)
+                    python_exe = os.path.join(python_dir, "python.exe")
+                    if os.path.exists(python_exe):
+                        python_cmd = python_exe
+                        try:
+                            if debug_log_created:
+                                with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                                    f.write(f"GUI: Found python.exe: {python_exe}\n")
+                                    f.flush()
+                        except:
+                            pass
+                    else:
+                        try:
+                            if debug_log_created:
+                                with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                                    f.write(f"GUI: python.exe not found in {python_dir}\n")
+                                    f.flush()
+                        except:
+                            pass
+                else:
+                    try:
+                        if debug_log_created:
+                            with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                                f.write(f"GUI: Using sys.executable as-is: {python_cmd}\n")
+                                f.flush()
+                    except:
+                        pass
+        except Exception as e:
+            # If there's an error finding Python, log it
+            try:
+                if debug_log_created:
+                    with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                        f.write(f"GUI: ERROR in Python finding logic: {e}\n")
+                        import traceback
+                        f.write(traceback.format_exc())
+                        f.flush()
+            except:
+                pass
+            messagebox.showerror("Error", f"Error finding Python executable: {e}")
+            return
+        
+        try:
+            if debug_log_created:
+                with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                    f.write(f"GUI: Final Python command: {python_cmd}\n")
+                    f.write(f"GUI: Python exists: {os.path.exists(python_cmd) if python_cmd else False}\n")
+                    f.flush()
+        except:
+            pass
+        
+        if not python_cmd:
+            try:
+                if debug_log_created:
+                    with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                        f.write("GUI: ERROR - python_cmd is None!\n")
+                        f.flush()
+            except:
+                pass
+            messagebox.showerror("Error", "Could not determine Python executable.")
+            return
+        
+        # Skip Python test - we already verified the executable exists
+        # The test was timing out on some systems (especially with multiple Python versions),
+        # and we'll get better error messages from the daemon itself if Python doesn't work
+        try:
+            if debug_log_created:
+                with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                    f.write("GUI: Skipping Python test (already verified executable exists)\n")
+                    f.write(f"GUI: Using Python: {python_cmd}\n")
+                    f.write("GUI: Proceeding directly to start daemon\n")
+                    f.flush()
+        except:
+            pass
+        
+        # Start daemon in background
+        try:
+            if debug_log_created:
+                with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                    f.write(f"GUI: About to start daemon process with subprocess.Popen\n")
+                    f.write(f"GUI: Python: {python_cmd}\n")
+                    f.write(f"GUI: Script: {script_path}\n")
+                    f.write(f"GUI: Working dir: {BASE_DIR}\n")
+                    f.write(f"GUI: Script exists: {os.path.exists(script_path)}\n")
+                    f.flush()
+        except:
+            pass
+        
+        try:
+            # Use subprocess.PIPE but also allow seeing output for debugging
+            try:
+                if debug_log_created:
+                    with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                        f.write("GUI: Calling subprocess.Popen() now...\n")
+                        f.flush()
+            except:
+                pass
+            
+            CREATE_NO_WINDOW = 0x08000000 if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
             if sys.platform == "win32":
                 self.daemon_process = subprocess.Popen(
                     [python_cmd, script_path],
                     cwd=BASE_DIR,
-                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,  # Merge stderr into stdout
+                    text=True,
+                    bufsize=1,  # Line buffered
+                    creationflags=CREATE_NO_WINDOW
                 )
             else:
                 self.daemon_process = subprocess.Popen(
                     [python_cmd, script_path],
                     cwd=BASE_DIR,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
                 )
             
-            # Wait a moment for it to start
-            time.sleep(2)
-            
-            if self.is_daemon_running():
-                self.update_status()
-                messagebox.showinfo("Success", "Death counter daemon started successfully!")
-            else:
-                messagebox.showerror("Error", "Failed to start daemon. Check if Python and all dependencies are installed.")
+            try:
+                if debug_log_created:
+                    with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                        f.write(f"GUI: subprocess.Popen() completed\n")
+                        f.write(f"GUI: Daemon process PID: {self.daemon_process.pid}\n")
+                        f.write(f"GUI: Process poll result: {self.daemon_process.poll()}\n")
+                        f.flush()
+            except Exception as e:
+                try:
+                    if debug_log_created:
+                        with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                            f.write(f"GUI: ERROR logging process info: {e}\n")
+                            f.flush()
+                except:
+                    pass
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to start daemon: {e}")
+            try:
+                if debug_log_created:
+                    with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                        f.write(f"GUI: ERROR - Exception during subprocess.Popen(): {e}\n")
+                        import traceback
+                        f.write(traceback.format_exc())
+                        f.flush()
+            except:
+                pass
+            messagebox.showerror("Error", f"Error starting daemon: {e}\n\nPython: {python_cmd}\nScript: {script_path}")
+            return
+        
+        # Wait for daemon to start - poll both process and lock file
+            max_wait_time = 15  # Wait up to 15 seconds (increased for safety)
+            check_interval = 0.2  # Check every 0.2 seconds (more frequent)
+            waited = 0
+            process_exited = False
+            lock_file_created = False
+            
+            # Debug: Log paths being checked to file
+            try:
+                with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                    f.write(f"\n{'='*70}\n")
+                    f.write(f"GUI: Starting daemon at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write(f"GUI: Checking for LOCK_FILE at: {LOCK_FILE}\n")
+                    f.write(f"GUI: Checking for READY_FILE at: {READY_FILE}\n")
+                    f.write(f"GUI: BASE_DIR is: {BASE_DIR}\n")
+                    f.write(f"GUI: Script path: {script_path}\n")
+                    f.write(f"GUI: Python cmd: {python_cmd}\n")
+                    f.write(f"GUI: LOCK_FILE exists: {os.path.exists(LOCK_FILE)}\n")
+                    f.write(f"GUI: READY_FILE exists: {os.path.exists(READY_FILE)}\n")
+            except:
+                pass
+            
+            while waited < max_wait_time:
+                # Log every 2 seconds what we're checking
+                if waited > 0 and int(waited * 10) % 10 == 0:  # Every 1 second
+                    try:
+                        if debug_log_created:
+                            with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                                f.write(f"GUI: Wait loop - waited {waited:.1f}s, checking files...\n")
+                                f.write(f"GUI:   LOCK_FILE exists: {os.path.exists(LOCK_FILE)}\n")
+                                f.write(f"GUI:   READY_FILE exists: {os.path.exists(READY_FILE)}\n")
+                                f.write(f"GUI:   Process running: {self.daemon_process.poll() is None}\n")
+                    except:
+                        pass
+                
+                # Check if process exited (error)
+                if self.daemon_process.poll() is not None:
+                    process_exited = True
+                    # Process exited - there was an error
+                    try:
+                        stdout, _ = self.daemon_process.communicate(timeout=1)
+                        error_msg = ""
+                        if stdout:
+                            error_msg = stdout.strip() if isinstance(stdout, str) else stdout.decode('utf-8', errors='ignore').strip()
+                        if not error_msg:
+                            error_msg = f"Process exited with code {self.daemon_process.returncode}"
+                        
+                        # Check debug.log for more details
+                        log_file = os.path.join(BASE_DIR, "debug.log")
+                        if os.path.exists(log_file):
+                            try:
+                                with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                                    lines = f.readlines()
+                                    if lines:
+                                        last_lines = ''.join(lines[-5:])  # Last 5 lines
+                                        if last_lines.strip():
+                                            error_msg += f"\n\nLast log entries:\n{last_lines[:400]}"
+                            except:
+                                pass
+                        
+                        # Try to get more info by running the script directly
+                        direct_test = subprocess.run(
+                            [python_cmd, script_path],
+                            capture_output=True,
+                            text=True,
+                            timeout=5,
+                            cwd=BASE_DIR
+                        )
+                        if direct_test.stderr:
+                            error_msg = direct_test.stderr[:500]
+                        elif direct_test.stdout:
+                            error_msg = direct_test.stdout[:500]
+                        
+                        messagebox.showerror("Error", f"Failed to start daemon.\n\nPython: {python_cmd}\nScript: {script_path}\n\nError: {error_msg[:500]}")
+                    except Exception as e:
+                        messagebox.showerror("Error", f"Failed to start daemon.\n\nPython: {python_cmd}\nScript: {script_path}\n\nProcess exited immediately. Check if all dependencies are installed.\n\nException: {e}")
+                    return
+                
+                # Check if lock file exists (even if process check fails)
+                if os.path.exists(LOCK_FILE):
+                    lock_file_created = True
+                    if waited < 0.5:  # Only log once
+                        try:
+                            with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                                f.write(f"GUI: Lock file found at: {LOCK_FILE}\n")
+                        except:
+                            pass
+                    
+                    # Check for ready file (daemon fully initialized)
+                    # Also verify the file actually has content (not just created)
+                    # Try multiple times with small delay to handle filesystem delays
+                    ready_file_found = False
+                    for check_attempt in range(5):  # Increased retries
+                        if os.path.exists(READY_FILE):
+                            try:
+                                # Verify file has content and is recent
+                                stat = os.stat(READY_FILE)
+                                if stat.st_size > 0:
+                                    # Double-check the process is still running
+                                    if self.daemon_process.poll() is None:
+                                        # Daemon is fully ready!
+                                        try:
+                                            with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                                                f.write(f"GUI: Ready file found and verified! Size: {stat.st_size} bytes\n")
+                                                f.write(f"GUI: Daemon started successfully!\n")
+                                        except:
+                                            pass
+                                        self.update_status()
+                                        messagebox.showinfo("Success", "Death counter daemon started successfully!")
+                                        return
+                                    else:
+                                        # Process died - break out and show error
+                                        try:
+                                            with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                                                f.write(f"GUI: Ready file exists but process exited (code: {self.daemon_process.returncode})\n")
+                                        except:
+                                            pass
+                                        break
+                                else:
+                                    try:
+                                        with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                                            f.write(f"GUI: Ready file exists but is empty (attempt {check_attempt + 1})\n")
+                                    except:
+                                        pass
+                            except Exception as e:
+                                try:
+                                    with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                                        f.write(f"GUI: Error checking ready file: {e}\n")
+                                except:
+                                    pass
+                        else:
+                            if check_attempt == 0 and waited > 1:
+                                try:
+                                    with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                                        f.write(f"GUI: Ready file not found yet (attempt {check_attempt + 1}), waited {waited:.1f}s\n")
+                                        f.write(f"GUI: LOCK_FILE exists: {os.path.exists(LOCK_FILE)}\n")
+                                        f.write(f"GUI: READY_FILE exists: {os.path.exists(READY_FILE)}\n")
+                                except:
+                                    pass
+                        # Small delay before retry (filesystem might need time)
+                        if check_attempt < 4:
+                            time.sleep(0.2)
+                    # Lock file exists but not ready yet - check debug.log to see what's happening
+                    log_file = os.path.join(BASE_DIR, "debug.log")
+                    if os.path.exists(log_file) and waited > 2:  # Only check log after 2 seconds
+                        try:
+                            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                                lines = f.readlines()
+                                if lines:
+                                    last_line = lines[-1].strip() if lines else ""
+                                    # If we see "Ready file created" but file doesn't exist, there's a filesystem issue
+                                    if "Ready file created" in last_line or "READY_FILE created" in last_line:
+                                        # File should exist - maybe filesystem delay, wait a bit more
+                                        time.sleep(0.5)
+                                        if os.path.exists(READY_FILE):
+                                            self.update_status()
+                                            messagebox.showinfo("Success", "Death counter daemon started successfully!")
+                                            return
+                        except:
+                            pass
+                    # Lock file exists but not ready yet - give it more time
+                    time.sleep(0.2)
+                    continue
+                # Also check if process is still running (even without lock file yet)
+                elif self.daemon_process.poll() is None:
+                    # Process is running, might still be initializing
+                    continue
+                
+                # Wait a bit before checking again
+                time.sleep(check_interval)
+                waited += check_interval
+            
+            # Timeout - check what happened
+            # Log timeout to debug file
+            try:
+                with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
+                    f.write(f"GUI: TIMEOUT after {waited:.1f} seconds\n")
+                    f.write(f"GUI: LOCK_FILE exists: {os.path.exists(LOCK_FILE)}\n")
+                    f.write(f"GUI: READY_FILE exists: {os.path.exists(READY_FILE)}\n")
+                    f.write(f"GUI: Process running: {self.daemon_process.poll() is None}\n")
+            except:
+                pass
+            
+            # First, check for startup error file
+            startup_error_file = os.path.join(BASE_DIR, "daemon_startup_error.txt")
+            if os.path.exists(startup_error_file):
+                try:
+                    with open(startup_error_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        error_content = f.read().strip()
+                    if error_content:
+                        messagebox.showerror("Daemon Startup Error", 
+                            f"Daemon encountered an error during startup:\n\n{error_content[:1000]}\n\n"
+                            f"Python: {python_cmd}\nScript: {script_path}")
+                        return
+                except:
+                    pass
+            
+            if process_exited:
+                # Already handled above
+                return
+            elif lock_file_created and os.path.exists(READY_FILE):
+                # Both files exist - daemon should be running
+                if self.is_daemon_running():
+                    self.update_status()
+                    messagebox.showinfo("Success", "Death counter daemon started successfully!")
+                    return
+                else:
+                    error_msg = "Ready file exists but process is not running."
+            elif lock_file_created:
+                # Lock file exists but ready file doesn't - daemon may be stuck initializing
+                error_msg = "Lock file exists but daemon did not finish initializing (ready file missing)."
+                try:
+                    with open(LOCK_FILE, "r") as f:
+                        pid_str = f.read().strip()
+                    error_msg = f"Lock file exists (PID: {pid_str}) but daemon did not finish initializing (ready file missing)."
+                    
+                    # Check if process is still running
+                    process_running = False
+                    try:
+                        import psutil
+                        if pid_str:
+                            pid = int(pid_str)
+                            if psutil.pid_exists(pid):
+                                process_running = True
+                                error_msg += f"\n\nProcess {pid} is still running."
+                            else:
+                                error_msg += f"\n\nProcess {pid} is NOT running (stale lock file)."
+                    except:
+                        # Fallback: check if daemon process is still running
+                        if self.daemon_process.poll() is None:
+                            process_running = True
+                            error_msg += "\n\nDaemon process is still running."
+                    
+                    # If process is running but ready file missing, check if it's just slow
+                    if process_running:
+                        error_msg += "\n\nThis might be a filesystem delay. The daemon may still be starting."
+                        error_msg += "\nCheck debug.log to see if 'Ready file created' appears."
+                except:
+                    pass
+                
+                # Check debug.log
+                log_file = os.path.join(BASE_DIR, "debug.log")
+                if os.path.exists(log_file):
+                    try:
+                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            lines = f.readlines()
+                            if lines:
+                                last_lines = ''.join(lines[-15:])  # Last 15 lines
+                                error_msg += f"\n\nLast log entries:\n{last_lines[:500]}"
+                    except:
+                        pass
+                
+                messagebox.showerror("Error", f"{error_msg}\n\nPython: {python_cmd}\nScript: {script_path}\n\nTry stopping any existing daemon first, then start again.")
+            elif self.daemon_process.poll() is None:
+                # Process is still running but no lock file
+                error_msg = "Daemon process is running but failed to create lock file."
+                try:
+                    # Check debug.log for errors
+                    log_file = os.path.join(BASE_DIR, "debug.log")
+                    if os.path.exists(log_file):
+                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            lines = f.readlines()
+                            if lines:
+                                last_lines = ''.join(lines[-15:])  # Last 15 lines
+                                error_msg += f"\n\nLast log entries:\n{last_lines[:500]}"
+                    else:
+                        error_msg += "\n\nNo debug.log found - daemon may not have initialized."
+                except:
+                    pass
+                messagebox.showerror("Error", f"{error_msg}\n\nPython: {python_cmd}\nScript: {script_path}\n\nCheck if all dependencies are installed and Tesseract OCR is installed.")
+            else:
+                # Process exited during wait
+                error_msg = "Process exited before creating lock file."
+                # Check debug.log
+                log_file = os.path.join(BASE_DIR, "debug.log")
+                if os.path.exists(log_file):
+                    try:
+                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            lines = f.readlines()
+                            if lines:
+                                last_lines = ''.join(lines[-15:])  # Last 15 lines
+                                error_msg += f"\n\nLast log entries:\n{last_lines[:500]}"
+                    except:
+                        pass
+                messagebox.showerror("Error", f"{error_msg}\n\nPython: {python_cmd}\nScript: {script_path}\n\nCheck debug.log for details.")
+        except subprocess.TimeoutExpired:
+            messagebox.showerror("Error", f"Timeout waiting for daemon to start.\n\nPython: {python_cmd}\nScript: {script_path}")
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            messagebox.showerror("Error", f"Failed to start daemon: {e}\n\nDetails: {error_details[:500]}")
     
     def stop_daemon(self):
         """Stop the death counter daemon."""
@@ -420,6 +1176,8 @@ class DeathCounterGUI:
             # Clean up
             if os.path.exists(STOP_FILE):
                 os.remove(STOP_FILE)
+            if os.path.exists(READY_FILE):
+                os.remove(READY_FILE)
             
             self.update_status()
             # Silently stop - no popup
