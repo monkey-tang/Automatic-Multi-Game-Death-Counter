@@ -1,51 +1,81 @@
-# Death Counter Installer
+# Death Counter - Multi-Game Death Counter Installer
 
-## Latest Update
-Fixed Start Daemon button with Python detection and script path fallback.
+## Latest Version: v1.5
 
-## File and Folder Descriptions
+**DeathCounterInstaller.exe** - Complete standalone Windows installer with automatic Japanese language pack download for Sekiro support.
 
-### `DeathCounterInstaller.exe`
-**Description:** The complete standalone Windows executable installer application. This is the full application file that sets up everything needed for the Multi-Game Death Counter with clear, step-by-step instructions and guided installation.
+## Quick Start
 
-**Complete Setup Application Features:**
-1. **Extracts/Updates Files**: Automatically places all necessary scripts and configuration files into `C:\1deathcounter`
-2. **Checks System Requirements**: Verifies Python and Tesseract OCR installations
-3. **Installs Python (Optional)**: Provides download button if Python is not found
-4. **Installs Tesseract OCR (Optional)**: Provides download button if Tesseract is not found
-5. **Installs Python Dependencies**: Automatically installs all required packages (mss, pillow, opencv-python, pytesseract, numpy, psutil) with verification
-6. **Downloads Streamer.bot (Optional)**: Opens the Streamer.bot download page
-7. **Imports Streamer.bot Action**: Guides you to import the `deathcounteraction.cs` file into Streamer.bot
-8. **Confirms Import**: Enables the "Launch" button after Streamer.bot import is confirmed
-9. **Launches Death Counter GUI**: Starts the main graphical interface for the Death Counter application
+1. Download **DeathCounterInstaller.exe**
+2. Run the installer (double-click)
+3. Follow the on-screen instructions to complete setup
+4. Launch the Death Counter GUI
 
-**Step-by-Step Installation Workflow:**
-1. Run `DeathCounterInstaller.exe` (double-click to launch)
-2. Click **"Install/Update Files"** → Extracts all application files
-3. Click **"Install Python"** (if needed) → Opens Python download page
-4. Click **"Install Tesseract"** (if needed) → Opens Tesseract download page  
-5. Click **"Install Dependencies"** → Installs all required Python packages
-6. Click **"Streamer.bot Download"** → Opens Streamer.bot download page
-7. Click **"Import to Streamer.bot"** → Opens Streamer.bot import dialog
-8. Click **"✓ Confirm Import"** → Enables the launch button
-9. Click **"Launch Death Counter"** → Starts the Death Counter GUI application
+## Features
 
-This single executable file contains everything needed to set up and run the entire Death Counter system on any Windows machine. No additional downloads or manual configuration required - it's a complete, self-contained setup application with step-by-step guidance.
+- **Automatic Setup**: Extracts all necessary files and dependencies
+- **System Checks**: Verifies Python, Tesseract OCR, and dependencies
+- **Auto-Download**: Automatically downloads Japanese language packs for Sekiro support
+- **Streamer.bot Integration**: Easy import of Streamer.bot actions
+- **Multi-Game Support**: Works with Elden Ring, Dark Souls series, Sekiro, and more
+- **Multi-Resolution Support**: Works on any screen resolution (720p, 1080p, 1440p, 4K, ultrawide)
 
-### `DeathCounter_Installer_Standalone.py`
-**Description:** The Python source code for the standalone installer. This script contains all necessary files embedded as base64-encoded strings and creates a self-extracting installer. Used to build the `.exe` file.
+## Installation Steps
 
-### `1death_counter_gui.py`
-**Description:** The main GUI control interface for the Death Counter application. This provides a user-friendly interface to start/stop the daemon, view status, and control the death counter system.
+1. Click **"Install/Update Files"** → Extracts all application files
+2. Click **"Install Python"** (if needed) → Opens Python download page
+3. Click **"Install Tesseract"** (if needed) → Opens Tesseract download page  
+4. Click **"Install Dependencies"** → Installs all required Python packages
+5. Click **"Streamer.bot Download"** (if needed) → Opens Streamer.bot download page
+6. Click **"Import to Streamer.bot"** → Opens Streamer.bot import dialog
+7. Click **"✓ Confirm Import"** → Enables the launch button
+8. Click **"Launch Death Counter"** → Starts the Death Counter GUI application
 
-### `distribution/` (Folder)
-**Description:** Contains the distribution-ready files for easy download. Includes the latest `.exe` installer and installation instructions.
+## Repository Structure
 
-### `distribution/DeathCounterInstaller.exe`
-**Description:** Copy of the latest installer executable, placed in the distribution folder for convenient access.
+### Main Branch (Current)
+- **DeathCounterInstaller.exe** - Latest installer (v1.5)
+- **README.md** - This file
+- **death counter source/** - All source code and scripts
 
-### `distribution/README.md`
-**Description:** Installation and usage instructions for end users downloading the installer from the distribution folder.
+### Source Files
+All source code, scripts, and configuration files are located in the **`death counter source/`** folder:
+- `1multi_game_death_counter.py` - Main daemon script
+- `1death_counter_gui.py` - GUI application
+- `1games_config.json` - Game configuration
+- `DeathCounter_Installer_Standalone.py` - Installer source code
+- `build_single_file.py` - Build script
+- `reset_death_counter.py` - Reset script
+- `test_daemon_start.py` - Test script
+- Streamer.bot action files (`.cs` files)
+- Batch files and utilities
 
-### `.gitignore`
-**Description:** Git configuration file that specifies which files and directories should be ignored by version control (e.g., build artifacts, temporary files, cache directories).
+### Old Versions
+Previous installer versions (v1.1 - v1.6) are available in the **`old-versions`** branch.
+
+## System Requirements
+
+- Windows 10/11
+- Python 3.8-3.13 (auto-detected or installable via installer)
+- Tesseract OCR (auto-downloadable via installer)
+- Internet connection (for initial setup and Japanese pack download)
+
+## Supported Games
+
+- Elden Ring
+- Dark Souls Remastered
+- Dark Souls II
+- Dark Souls III
+- Sekiro: Shadows Die Twice (with Japanese character support)
+
+## Troubleshooting
+
+If you encounter issues:
+1. Ensure you're running the installer as Administrator
+2. Check that Python and Tesseract OCR are properly installed
+3. Verify internet connection for Japanese pack auto-download
+4. Check the log output in the installer for specific error messages
+
+## License
+
+See repository for license information.

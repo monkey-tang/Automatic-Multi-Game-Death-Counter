@@ -4,52 +4,103 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-
-# PyInstaller
-*.spec
-build/
 dist/
+build/
+*.spec
 
 # IDE
 .vscode/
 .idea/
+*.code-workspace
+
+# Logs and debug files
+*.log
+debug*.png
+test_*.png
+*.lock
+
+# State files
+death_state.json
+death_counter*.txt
+current_deaths.txt
+current_game.txt
+daemon.lock
+STOP
+
+# Temporary files
+*.tmp
+*.bak
 *.swp
-*.swo
 *~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Project specific
-*.lock
-daemon.lock
-STOP
-debug.log
-debug_capture*.png
-*.txt
-!requirements.txt
-!README.md
+# Build artifacts
+*.exe
+!DeathCounterInstaller.exe
+!distribution/DeathCounterInstaller.exe
 
-# Keep config files but ignore state
-death_state.json
+# Old versions (moved to old-versions branch)
+versionsdeathcounter/
+
+# Backup folders
+backup/
+
+# Test files
+test_*.py
+*test*.py
+!test_daemon_start.py
+
+# Duplicate/unused files
+1*.md
+1*.bat
+1*.py
+1*.cs
+1*.json
+!1multi_game_death_counter.py
+!1death_counter_gui.py
+!1games_config.json
+!1StreamerBot_*.cs
+!1START_DEATH_COUNTER.bat
+!1STOP_DEATH_COUNTER.bat
+!1RESET_DEATH_COUNTER.bat
+
+# Documentation (keep only main README)
+*_README.md
+*_GUIDE.md
+*_SETUP.md
+*_INDEX.md
+QUICK_*.md
+HOW_TO_*.md
+DAEMON_*.md
+MANUAL_*.md
+AUTO_*.md
+BUILD_*.md
+STREAMERBOT_*.md
+VERIFY_*.md
+DISTRIBUTION_*.md
+DOCUMENTATION_*.md
+
+# Utility scripts (not needed in main)
+*.ps1
+*.bat
+!RESET_DEATH_COUNTER.bat
+!START_DEATH_COUNTER.bat
+!STOP_DEATH_COUNTER.bat
+!install_dependencies.bat
+
+# Other
+icon.ico
+gui_b64.txt
+DeathCounter_Installer.py
+multi_game_death_counter.py
+death_counter_gui.py
 games_config.json
-
+switch_game_manual.py
+change_monitor_id.py
+capture_debug_once.py
+create_icon.py
+check_build.*
