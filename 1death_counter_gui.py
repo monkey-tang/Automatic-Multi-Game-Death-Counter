@@ -852,14 +852,15 @@ class DeathCounterGUI:
             return
         
         # Wait for daemon to start - poll both process and lock file
-            max_wait_time = 15  # Wait up to 15 seconds (increased for safety)
-            check_interval = 0.2  # Check every 0.2 seconds (more frequent)
-            waited = 0
-            process_exited = False
-            lock_file_created = False
-            
-            # Debug: Log paths being checked to file
-            try:
+        max_wait_time = 15  # Wait up to 15 seconds (increased for safety)
+        check_interval = 0.2  # Check every 0.2 seconds (more frequent)
+        waited = 0
+        process_exited = False
+        lock_file_created = False
+        
+        # Debug: Log paths being checked to file
+        try:
+            if debug_log_created:
                 with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
                     f.write(f"\n{'='*70}\n")
                     f.write(f"GUI: Starting daemon at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
