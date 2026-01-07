@@ -424,6 +424,42 @@ try {{
     except Exception as e:
         log(f"Attempt 3 (PowerShell) failed: {e}")
 
+    # Attempt 4: Elevated PowerShell (prompts UAC) with SkipCertificateCheck for permission issues
+    try:
+        log("Attempt 4: Downloading with elevated PowerShell (UAC prompt, bypassing certificate check)...")
+        import tempfile
+        ps_script = f"""
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$dest = '{tessdata_dir}'
+Invoke-WebRequest -Uri "{jpn_url}" -UseBasicParsing -SkipCertificateCheck -OutFile "$dest\\jpn.traineddata" -TimeoutSec 60
+Invoke-WebRequest -Uri "{jpn_vert_url}" -UseBasicParsing -SkipCertificateCheck -OutFile "$dest\\jpn_vert.traineddata" -TimeoutSec 60
+"""
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".ps1", mode="w", encoding="utf-8") as tmp:
+            tmp.write(ps_script)
+            ps1_path = tmp.name
+        # Launch elevated PowerShell to execute the script
+        elevated_cmd = [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-Command",
+            f"Start-Process powershell -Verb RunAs -Wait -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','{ps1_path}'"
+        ]
+        subprocess.run(elevated_cmd, check=False, capture_output=True, text=True, timeout=120)
+        jpn_ok = file_ok(jpn_file)
+        jpn_vert_ok = file_ok(jpn_vert_file)
+        if jpn_ok and jpn_vert_ok:
+            log("Japanese language packs downloaded successfully! (Attempt 4 - Elevated PowerShell)")
+            log("Sekiro detection is now fully supported!")
+            return True
+        elif jpn_ok:
+            log("jpn.traineddata downloaded successfully! (Attempt 4)")
+            log("Note: jpn_vert.traineddata failed, but basic support is available")
+            return True
+    except Exception as e:
+        log(f"Attempt 4 (Elevated PowerShell) failed: {e}")
+
     # Final fallback: guide manual download
     log("Japanese pack auto-download failed. Manual download recommended for Sekiro.")
     log("Download from:")
