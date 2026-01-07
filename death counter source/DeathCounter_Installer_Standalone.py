@@ -291,6 +291,175 @@ def check_tesseract():
         pass
     return False, None
 
+def find_tesseract_tessdata():
+    """Find the Tesseract tessdata directory."""
+    tesseract_paths = [
+        r"C:\Program Files\Tesseract-OCR\tessdata",
+        r"C:\Program Files (x86)\Tesseract-OCR\tessdata",
+    ]
+    for path in tesseract_paths:
+        if os.path.exists(path):
+            return path
+    return None
+
+def check_japanese_lang_pack():
+    """Check if Japanese language pack is installed."""
+    tessdata_dir = find_tesseract_tessdata()
+    if not tessdata_dir:
+        return False
+    jpn_file = os.path.join(tessdata_dir, "jpn.traineddata")
+    jpn_vert_file = os.path.join(tessdata_dir, "jpn_vert.traineddata")
+    return os.path.exists(jpn_file) and os.path.exists(jpn_vert_file)
+
+def download_japanese_lang_pack(log_callback=None):
+    """Download Japanese language pack for Tesseract with multiple fallbacks.
+    
+    Args:
+        log_callback: Optional function to call for logging messages (takes a string)
+    
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    def log(msg):
+        if log_callback:
+            log_callback(msg)
+    
+    tessdata_dir = find_tesseract_tessdata()
+    if not tessdata_dir:
+        return False, "Tesseract tessdata directory not found"
+    
+    urls = {
+        "jpn.traineddata": "https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata",
+        "jpn_vert.traineddata": "https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata",
+    }
+    
+    import ssl
+    import shutil
+    
+    log("Downloading Japanese language packs for Tesseract...")
+    log("Note: Japanese packs are required for reliable Sekiro detection (Japanese '死' character)")
+    
+    temp_dir = tempfile.mkdtemp()
+    
+    try:
+        # Download files to temp directory first (no admin needed)
+        # Track which files need downloading
+        files_to_download = []
+        for filename, url in urls.items():
+            target_file = os.path.join(tessdata_dir, filename)
+            if not os.path.exists(target_file):
+                files_to_download.append((filename, url))
+        
+        if not files_to_download:
+            log("Japanese language packs already installed.")
+            return True, "Japanese pack already installed"
+        
+        # Attempt 1: Standard urllib with SSL verification
+        log("Attempt 1: Downloading to temp with standard SSL verification...")
+        attempt1_success = {}
+        for filename, url in files_to_download:
+            temp_file = os.path.join(temp_dir, filename)
+            try:
+                import urllib.request
+                urllib.request.urlretrieve(url, temp_file)
+                attempt1_success[filename] = True
+            except Exception as e1:
+                attempt1_success[filename] = False
+                log(f"Attempt 1 failed for {filename}: {e1}")
+        
+        # If attempt 1 failed for any files, try attempt 2
+        failed_files = [f for f, success in attempt1_success.items() if not success]
+        if failed_files:
+            attempt_num = 2
+            log(f"Attempt {attempt_num}: Downloading to temp with relaxed SSL (ignoring certificate validation)...")
+            attempt2_success = {}
+            for filename, url in files_to_download:
+                if filename in failed_files:
+                    temp_file = os.path.join(temp_dir, filename)
+                    try:
+                        ssl_context = ssl.create_default_context()
+                        ssl_context.check_hostname = False
+                        ssl_context.verify_mode = ssl.CERT_NONE
+                        urllib.request.urlretrieve(url, temp_file, context=ssl_context)
+                        attempt2_success[filename] = True
+                    except Exception as e2:
+                        attempt2_success[filename] = False
+                        log(f"Attempt {attempt_num} failed for {filename}: {e2}")
+                        # Attempt 3: PowerShell Invoke-WebRequest with -SkipCertificateCheck
+                        attempt_num = 3
+                        log(f"Attempt {attempt_num}: Downloading with PowerShell (bypassing certificate check)...")
+                        try:
+                            ps_cmd = f'Invoke-WebRequest -Uri "{url}" -OutFile "{temp_file}" -SkipCertificateCheck'
+                            result = subprocess.run(
+                                ['powershell', '-Command', ps_cmd],
+                                capture_output=True,
+                                timeout=60
+                            )
+                            if result.returncode == 0 and os.path.exists(temp_file):
+                                attempt2_success[filename] = True
+                            else:
+                                attempt2_success[filename] = False
+                                log(f"Attempt {attempt_num} failed for {filename}: PowerShell returned code {result.returncode}")
+                        except Exception as e3:
+                            attempt2_success[filename] = False
+                            log(f"Attempt {attempt_num} failed for {filename}: {e3}")
+                else:
+                    attempt2_success[filename] = True  # Already downloaded in attempt 1
+            
+            # Check if all files downloaded successfully
+            all_success = all(attempt2_success.get(f, False) for f, _ in files_to_download)
+            if all_success:
+                log(f"Downloaded to temp successfully (Attempt 2 - unverified SSL)")
+            else:
+                failed = [f for f, success in attempt2_success.items() if not success]
+                return False, f"Failed to download: {', '.join(failed)}"
+        else:
+            # All files downloaded in attempt 1
+            log("Downloaded to temp successfully (Attempt 1 - standard SSL)")
+        
+        # Copy files from temp to tessdata (may need elevation)
+        log("Attempting elevated copy (UAC prompt) to install Japanese packs...")
+        elevation_used = False
+        for filename in urls.keys():
+            temp_file = os.path.join(temp_dir, filename)
+            target_file = os.path.join(tessdata_dir, filename)
+            
+            if not os.path.exists(temp_file):
+                continue
+            
+            try:
+                shutil.copy2(temp_file, target_file)
+            except PermissionError:
+                # Attempt elevated PowerShell copy
+                elevation_used = True
+                try:
+                    ps_cmd = f'Start-Process powershell -ArgumentList "-Command", "Copy-Item -Path \'{temp_file}\' -Destination \'{target_file}\' -Force" -Verb RunAs -Wait'
+                    result = subprocess.run(
+                        ['powershell', '-Command', ps_cmd],
+                        capture_output=True,
+                        timeout=30
+                    )
+                    if not os.path.exists(target_file):
+                        return False, f"Permission denied copying {filename}"
+                except Exception as e:
+                    return False, f"Permission denied copying {filename}: {e}"
+        
+        if elevation_used:
+            log("Japanese language packs installed via elevated copy. Sekiro detection is now fully supported!")
+        
+        log("Japanese pack downloaded successfully! Sekiro detection is now fully supported!")
+        return True, "Japanese pack downloaded successfully"
+    
+    except Exception as e:
+        log(f"Error during download: {e}")
+        return False, str(e)
+    finally:
+        # Clean up temp directory
+        try:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        except:
+            pass
+
 def install_dependencies():
     """Install Python dependencies."""
     python_exe = find_python_executable()
@@ -310,7 +479,7 @@ def install_dependencies():
 class InstallerGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Death Counter - Installer & Launcher v1.5")
+        self.root.title("Death Counter - Installer & Launcher")
         self.root.geometry("850x650")
         self.root.resizable(False, False)
         
@@ -323,13 +492,9 @@ class InstallerGUI:
         main_frame = ttk.Frame(self.root, padding="20")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        title = ttk.Label(main_frame, text="Death Counter v1.5", 
+        title = ttk.Label(main_frame, text="Death Counter", 
                          font=("Arial", 18, "bold"))
-        title.grid(row=0, column=0, columnspan=2, pady=(0, 5))
-        
-        subtitle = ttk.Label(main_frame, text="Installer & Launcher", 
-                            font=("Arial", 10))
-        subtitle.grid(row=0, column=0, columnspan=2, pady=(0, 20))
+        title.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
         status_frame = ttk.LabelFrame(main_frame, text="System Check", padding="10")
         status_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
@@ -342,6 +507,9 @@ class InstallerGUI:
         
         self.deps_status = ttk.Label(status_frame, text="Checking dependencies...")
         self.deps_status.grid(row=2, column=0, sticky=tk.W, pady=2)
+        
+        self.japanese_pack_status = ttk.Label(status_frame, text="Checking Japanese pack...")
+        self.japanese_pack_status.grid(row=3, column=0, sticky=tk.W, pady=2)
         
         log_frame = ttk.LabelFrame(main_frame, text="Log", padding="10")
         log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
@@ -414,8 +582,14 @@ class InstallerGUI:
         tesseract_ok, tesseract_path = check_tesseract()
         if tesseract_ok:
             self.tesseract_status.config(text="✓ Tesseract OCR: Found", foreground="green")
+            # Check Japanese pack if Tesseract is found
+            if check_japanese_lang_pack():
+                self.japanese_pack_status.config(text="✓ Japanese Pack: Installed (Sekiro support)", foreground="green")
+            else:
+                self.japanese_pack_status.config(text="⚠ Japanese Pack: Not found (auto-download on install)", foreground="orange")
         else:
             self.tesseract_status.config(text="✗ Tesseract OCR: Not found (install from link below)", foreground="orange")
+            self.japanese_pack_status.config(text="⚠ Japanese Pack: Tesseract required", foreground="gray")
         
         try:
             import mss
@@ -521,6 +695,26 @@ class InstallerGUI:
             try:
                 extracted = extract_files()
                 self.log(f"Extracted {len(extracted)} files successfully!")
+                
+                # Auto-download Japanese pack if Tesseract is found and pack is missing
+                tesseract_ok, _ = check_tesseract()
+                if tesseract_ok:
+                    if not check_japanese_lang_pack():
+                        self.log("Japanese language pack not found. Attempting auto-download...")
+                        self.log("Note: Japanese pack is required for reliable Sekiro detection (Japanese '死' character)")
+                        success, message = download_japanese_lang_pack(log_callback=self.log)
+                        if success:
+                            self.japanese_pack_status.config(text="✓ Japanese Pack: Installed (Sekiro support)", foreground="green")
+                        else:
+                            self.log(f"Japanese pack auto-download failed. Manual download recommended for Sekiro.")
+                            self.log("Download from:")
+                            self.log("  https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata")
+                            self.log("  https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata")
+                            self.log(f"Save to: {find_tesseract_tessdata() or 'Tesseract tessdata directory'}")
+                            self.japanese_pack_status.config(text="⚠ Japanese Pack: Auto-download failed", foreground="orange")
+                    else:
+                        self.log("Japanese language pack already installed.")
+                
                 self.setup_complete = True
                 self.update_launch_button_state()
             except Exception as e:
