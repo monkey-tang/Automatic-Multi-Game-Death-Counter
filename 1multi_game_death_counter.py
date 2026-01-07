@@ -134,8 +134,9 @@ DEFAULT_GAMES = {
     },
     "Sekiro": {
         "region": {"use_percentages": True, "left": 0.3802, "top": 0.2685, "width": 0.2240, "height": 0.4074},
-        "keywords": ["DEATH"],
-        "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=DEATH",
+        "keywords": ["DEATH", "死"],
+        "tesseract_config": "--oem 3 --psm 7",
+        "tesseract_lang": "jpn+eng",
         "monitor_index": 2,
         "process_names": ["sekiro.exe"],
     },
@@ -656,7 +657,16 @@ def preprocess_for_ocr(img_rgb: Image.Image) -> Tuple[Image.Image, Dict]:
     
     mask1 = cv2.inRange(hsv, lower1, upper1)
     mask2 = cv2.inRange(hsv, lower2, upper2)
-    mask = cv2.bitwise_or(mask1, mask2)
+    red_mask = cv2.bitwise_or(mask1, mask2)
+    
+    # Strategy 1b: Also detect white/bright text (for Sekiro white death message)
+    # White/bright colors have high value (brightness) and low saturation
+    white_lower = np.array([0, 0, 200], dtype=np.uint8)  # Low saturation, high brightness
+    white_upper = np.array([180, 30, 255], dtype=np.uint8)
+    white_mask = cv2.inRange(hsv, white_lower, white_upper)
+    
+    # Combine red and white masks
+    mask = cv2.bitwise_or(red_mask, white_mask)
     
     # Clean noise with better morphology operations
     # Use smaller kernel for less aggressive cleaning (preserves text better)
@@ -670,9 +680,9 @@ def preprocess_for_ocr(img_rgb: Image.Image) -> Tuple[Image.Image, Dict]:
     total = int(mask.shape[0] * mask.shape[1])
     coverage = white / max(1, total)
     
-    info = {"mode": "HSV_RED", "coverage": coverage}
+    info = {"mode": "HSV_RED_WHITE", "coverage": coverage}
     
-    # Use red mask if coverage is reasonable (at least 0.3% of image - lowered threshold)
+    # Use red/white mask if coverage is reasonable (at least 0.3% of image - lowered threshold)
     if coverage >= 0.003:
         # Invert mask: white text on black background -> black text on white
         inv = cv2.bitwise_not(mask)
@@ -712,12 +722,18 @@ def preprocess_for_ocr(img_rgb: Image.Image) -> Tuple[Image.Image, Dict]:
     return Image.fromarray(out), info
 
 
-def ocr_text(img_for_ocr: Image.Image, tesseract_config: str) -> str:
-    """Extract text from image using OCR."""
+def ocr_text(img_for_ocr: Image.Image, tesseract_config: str, tesseract_lang: str = "eng") -> str:
+    """Extract text from image using OCR. Supports multiple languages including Japanese."""
     try:
-        text = pytesseract.image_to_string(img_for_ocr, lang="eng", config=tesseract_config)
-        # Remove all non-alphabetic characters and uppercase
-        clean = "".join(c for c in text.upper() if c.isalpha())
+        text = pytesseract.image_to_string(img_for_ocr, lang=tesseract_lang, config=tesseract_config)
+        # For English-only, remove non-alphabetic and uppercase
+        # For Japanese/multi-language, keep all characters (including Japanese) but remove spaces
+        if tesseract_lang == "eng" or (tesseract_lang.startswith("eng") and "+" not in tesseract_lang):
+            clean = "".join(c for c in text.upper() if c.isalpha())
+        else:
+            # For Japanese/multi-language: keep all characters including Japanese, Chinese, etc.
+            # Remove spaces and newlines, but keep all other characters
+            clean = "".join(c for c in text if not c.isspace())
         return clean
     except Exception as e:
         log(f"OCR error: {e}")
@@ -904,6 +920,7 @@ def main_loop():
         region = game_config.get("region", {})
         keywords = game_config.get("keywords", ["YOUDIED"])
         tesseract_config = game_config.get("tesseract_config", "--oem 3 --psm 7")
+        tesseract_lang = game_config.get("tesseract_lang", "eng")
         
         # Auto-detection check interval (check every 30 ticks = ~9 seconds at 0.3s tick)
         auto_detect_interval = 30
@@ -1001,7 +1018,7 @@ def main_loop():
                     except Exception as e:
                         log(f"DEBUG OCR SAVE ERROR: {e}")
                 
-                clean = ocr_text(ocr_img, tesseract_config)
+                clean = ocr_text(ocr_img, tesseract_config, tesseract_lang)
                 detected = contains_keyword(clean, keywords)
                 state["streak"] = (state["streak"] + 1) if detected else 0
                 
