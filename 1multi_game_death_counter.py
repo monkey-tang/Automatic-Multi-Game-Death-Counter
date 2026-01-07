@@ -551,21 +551,46 @@ def grab_region(sct: mss, monitor_index: int, region: dict, game_config: Dict = 
         "width": region["width"],
         "height": region["height"],
     }
+    # Capture at full quality (mss captures at native resolution)
     grab = sct.grab(abs_region)
-    return Image.frombytes("RGB", grab.size, grab.rgb)
+    img = Image.frombytes("RGB", grab.size, grab.rgb)
+    
+    # If the captured region is very small, upscale it immediately to improve quality
+    # This helps with pixelated text from small capture regions
+    if img.size[0] < 200 or img.size[1] < 100:
+        # Small region - upscale using high-quality resampling
+        new_width = img.size[0] * 2
+        new_height = img.size[1] * 2
+        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    
+    return img
 
 
 def preprocess_for_ocr(img_rgb: Image.Image) -> Tuple[Image.Image, Dict]:
     """
     Preprocess image for OCR with multiple fallback strategies.
-    Fixes the black image issue by using robust preprocessing methods.
+    Improved upscaling and sharpening for better OCR accuracy and reduced pixelation.
     """
+    # Convert PIL to numpy array
     rgb = np.array(img_rgb)
+    
+    # If image is very small, upscale it first before processing
+    if rgb.shape[0] < 150 or rgb.shape[1] < 300:
+        # Very small image - upscale using high-quality method
+        scale_factor = max(300 / rgb.shape[1], 150 / rgb.shape[0])
+        new_width = int(rgb.shape[1] * scale_factor)
+        new_height = int(rgb.shape[0] * scale_factor)
+        # Use PIL's LANCZOS for better quality upscaling
+        img_rgb = img_rgb.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        rgb = np.array(img_rgb)
+    
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     
     def upscale(img_cv):
-        """Upscale image 2x for better OCR."""
-        return cv2.resize(img_cv, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+        """Upscale image 3x for better OCR quality and reduced pixelation."""
+        # Use LANCZOS interpolation for better quality (slower but much better for text)
+        # 3x upscale gives better results than 2x for pixelated text
+        return cv2.resize(img_cv, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_LANCZOS4)
     
     # Strategy 1: Try HSV red mask (for "YOU DIED" red text)
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
@@ -580,10 +605,12 @@ def preprocess_for_ocr(img_rgb: Image.Image) -> Tuple[Image.Image, Dict]:
     mask2 = cv2.inRange(hsv, lower2, upper2)
     mask = cv2.bitwise_or(mask1, mask2)
     
-    # Clean noise
-    kernel = np.ones((3, 3), np.uint8)
+    # Clean noise with better morphology operations
+    # Use smaller kernel for less aggressive cleaning (preserves text better)
+    kernel = np.ones((2, 2), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+    # Gentle dilation to connect text characters
     mask = cv2.dilate(mask, kernel, iterations=1)
     
     white = int(cv2.countNonZero(mask))
@@ -592,25 +619,40 @@ def preprocess_for_ocr(img_rgb: Image.Image) -> Tuple[Image.Image, Dict]:
     
     info = {"mode": "HSV_RED", "coverage": coverage}
     
-    # Use red mask if coverage is reasonable (at least 0.5% of image)
-    if coverage >= 0.005:
+    # Use red mask if coverage is reasonable (at least 0.3% of image - lowered threshold)
+    if coverage >= 0.003:
         # Invert mask: white text on black background -> black text on white
         inv = cv2.bitwise_not(mask)
+        # Apply slight sharpening to improve text clarity
+        kernel_sharpen = np.array([[-1, -1, -1],
+                                   [-1,  9, -1],
+                                   [-1, -1, -1]])
+        inv = cv2.filter2D(inv, -1, kernel_sharpen)
         out = upscale(inv)
         return Image.fromarray(out), info
     
     # Strategy 2: Grayscale with adaptive threshold (works for any text color)
     # This fallback ensures we NEVER get a black image - adaptive threshold always produces output
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    # Use less blur to preserve text details
     gray_blur = cv2.GaussianBlur(gray, (3, 3), 0)
+    # Apply unsharp mask for better text clarity
+    gaussian = cv2.GaussianBlur(gray_blur, (0, 0), 2.0)
+    unsharp = cv2.addWeighted(gray_blur, 1.5, gaussian, -0.5, 0)
+    
     thr_adapt = cv2.adaptiveThreshold(
-        gray_blur, 255,
+        unsharp, 255,
         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
         cv2.THRESH_BINARY,
         31, 5
     )
     # Invert: make text dark on light background (Tesseract prefers dark text on light)
     thr_adapt_inv = cv2.bitwise_not(thr_adapt)
+    # Apply slight sharpening to improve text clarity
+    kernel_sharpen = np.array([[-1, -1, -1],
+                               [-1,  9, -1],
+                               [-1, -1, -1]])
+    thr_adapt_inv = cv2.filter2D(thr_adapt_inv, -1, kernel_sharpen)
     out = upscale(thr_adapt_inv)
     info["mode"] = "ADAPTIVE_THRESHOLD"
     info["coverage"] = 0.0  # Set coverage for consistency
