@@ -876,8 +876,8 @@ class DeathCounterGUI:
             pass
         
         while waited < max_wait_time:
-                # Log every 2 seconds what we're checking
-                if waited > 0 and int(waited * 10) % 10 == 0:  # Every 1 second
+            # Log every 2 seconds what we're checking
+            if waited > 0 and int(waited * 10) % 10 == 0:  # Every 1 second
                     try:
                         if debug_log_created:
                             with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
@@ -887,9 +887,9 @@ class DeathCounterGUI:
                                 f.write(f"GUI:   Process running: {self.daemon_process.poll() is None}\n")
                     except:
                         pass
-                
-                # Check if process exited (error)
-                if self.daemon_process.poll() is not None:
+            
+            # Check if process exited (error)
+            if self.daemon_process.poll() is not None:
                     process_exited = True
                     # Process exited - there was an error
                     try:
@@ -930,9 +930,9 @@ class DeathCounterGUI:
                     except Exception as e:
                         messagebox.showerror("Error", f"Failed to start daemon.\n\nPython: {python_cmd}\nScript: {script_path}\n\nProcess exited immediately. Check if all dependencies are installed.\n\nException: {e}")
                     return
-                
-                # Check if lock file exists (even if process check fails)
-                if os.path.exists(LOCK_FILE):
+            
+            # Check if lock file exists (even if process check fails)
+            if os.path.exists(LOCK_FILE):
                     lock_file_created = True
                     if waited < 0.5:  # Only log once
                         try:
@@ -1016,134 +1016,130 @@ class DeathCounterGUI:
                     # Lock file exists but not ready yet - give it more time
                     time.sleep(0.2)
                     continue
-                # Also check if process is still running (even without lock file yet)
-                elif self.daemon_process.poll() is None:
-                    # Process is running, might still be initializing
-                    continue
-                
-                # Wait a bit before checking again
-                time.sleep(check_interval)
-                waited += check_interval
+            # Also check if process is still running (even without lock file yet)
+            elif self.daemon_process.poll() is None:
+                # Process is running, might still be initializing
+                continue
+            
+            # Wait a bit before checking again
+            time.sleep(check_interval)
+            waited += check_interval
         
         # Timeout - check what happened
         # Log timeout to debug file
         try:
+            if debug_log_created:
                 with open(GUI_DEBUG_LOG, "a", encoding="utf-8") as f:
                     f.write(f"GUI: TIMEOUT after {waited:.1f} seconds\n")
                     f.write(f"GUI: LOCK_FILE exists: {os.path.exists(LOCK_FILE)}\n")
                     f.write(f"GUI: READY_FILE exists: {os.path.exists(READY_FILE)}\n")
                     f.write(f"GUI: Process running: {self.daemon_process.poll() is None}\n")
+                    f.flush()
+        except:
+            pass
+        
+        # First, check for startup error file
+        startup_error_file = os.path.join(BASE_DIR, "daemon_startup_error.txt")
+        if os.path.exists(startup_error_file):
+            try:
+                with open(startup_error_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    error_content = f.read().strip()
+                if error_content:
+                    messagebox.showerror("Daemon Startup Error", 
+                        f"Daemon encountered an error during startup:\n\n{error_content[:1000]}\n\n"
+                        f"Python: {python_cmd}\nScript: {script_path}")
+                    return
             except:
                 pass
-            
-            # First, check for startup error file
-            startup_error_file = os.path.join(BASE_DIR, "daemon_startup_error.txt")
-            if os.path.exists(startup_error_file):
-                try:
-                    with open(startup_error_file, 'r', encoding='utf-8', errors='ignore') as f:
-                        error_content = f.read().strip()
-                    if error_content:
-                        messagebox.showerror("Daemon Startup Error", 
-                            f"Daemon encountered an error during startup:\n\n{error_content[:1000]}\n\n"
-                            f"Python: {python_cmd}\nScript: {script_path}")
-                        return
-                except:
-                    pass
         
         if process_exited:
             # Already handled above
             return
         elif lock_file_created and os.path.exists(READY_FILE):
-                # Both files exist - daemon should be running
-                if self.is_daemon_running():
-                    self.update_status()
-                    messagebox.showinfo("Success", "Death counter daemon started successfully!")
-                    return
-                else:
-                    error_msg = "Ready file exists but process is not running."
-            elif lock_file_created:
-                # Lock file exists but ready file doesn't - daemon may be stuck initializing
-                error_msg = "Lock file exists but daemon did not finish initializing (ready file missing)."
-                try:
-                    with open(LOCK_FILE, "r") as f:
-                        pid_str = f.read().strip()
-                    error_msg = f"Lock file exists (PID: {pid_str}) but daemon did not finish initializing (ready file missing)."
-                    
-                    # Check if process is still running
-                    process_running = False
-                    try:
-                        import psutil
-                        if pid_str:
-                            pid = int(pid_str)
-                            if psutil.pid_exists(pid):
-                                process_running = True
-                                error_msg += f"\n\nProcess {pid} is still running."
-                            else:
-                                error_msg += f"\n\nProcess {pid} is NOT running (stale lock file)."
-                    except:
-                        # Fallback: check if daemon process is still running
-                        if self.daemon_process.poll() is None:
-                            process_running = True
-                            error_msg += "\n\nDaemon process is still running."
-                    
-                    # If process is running but ready file missing, check if it's just slow
-                    if process_running:
-                        error_msg += "\n\nThis might be a filesystem delay. The daemon may still be starting."
-                        error_msg += "\nCheck debug.log to see if 'Ready file created' appears."
-                except:
-                    pass
-                
-                # Check debug.log
-                log_file = os.path.join(BASE_DIR, "debug.log")
-                if os.path.exists(log_file):
-                    try:
-                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                            lines = f.readlines()
-                            if lines:
-                                last_lines = ''.join(lines[-15:])  # Last 15 lines
-                                error_msg += f"\n\nLast log entries:\n{last_lines[:500]}"
-                    except:
-                        pass
-                
-                messagebox.showerror("Error", f"{error_msg}\n\nPython: {python_cmd}\nScript: {script_path}\n\nTry stopping any existing daemon first, then start again.")
-            elif self.daemon_process.poll() is None:
-                # Process is still running but no lock file
-                error_msg = "Daemon process is running but failed to create lock file."
-                try:
-                    # Check debug.log for errors
-                    log_file = os.path.join(BASE_DIR, "debug.log")
-                    if os.path.exists(log_file):
-                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                            lines = f.readlines()
-                            if lines:
-                                last_lines = ''.join(lines[-15:])  # Last 15 lines
-                                error_msg += f"\n\nLast log entries:\n{last_lines[:500]}"
-                    else:
-                        error_msg += "\n\nNo debug.log found - daemon may not have initialized."
-                except:
-                    pass
-                messagebox.showerror("Error", f"{error_msg}\n\nPython: {python_cmd}\nScript: {script_path}\n\nCheck if all dependencies are installed and Tesseract OCR is installed.")
+            # Both files exist - daemon should be running
+            if self.is_daemon_running():
+                self.update_status()
+                messagebox.showinfo("Success", "Death counter daemon started successfully!")
+                return
             else:
-                # Process exited during wait
-                error_msg = "Process exited before creating lock file."
-                # Check debug.log
+                error_msg = "Ready file exists but process is not running."
+        elif lock_file_created:
+            # Lock file exists but ready file doesn't - daemon may be stuck initializing
+            error_msg = "Lock file exists but daemon did not finish initializing (ready file missing)."
+            try:
+                with open(LOCK_FILE, "r") as f:
+                    pid_str = f.read().strip()
+                error_msg = f"Lock file exists (PID: {pid_str}) but daemon did not finish initializing (ready file missing)."
+                
+                # Check if process is still running
+                process_running = False
+                try:
+                    import psutil
+                    if pid_str:
+                        pid = int(pid_str)
+                        if psutil.pid_exists(pid):
+                            process_running = True
+                            error_msg += f"\n\nProcess {pid} is still running."
+                        else:
+                            error_msg += f"\n\nProcess {pid} is NOT running (stale lock file)."
+                except:
+                    # Fallback: check if daemon process is still running
+                    if self.daemon_process.poll() is None:
+                        process_running = True
+                        error_msg += "\n\nDaemon process is still running."
+                
+                # If process is running but ready file missing, check if it's just slow
+                if process_running:
+                    error_msg += "\n\nThis might be a filesystem delay. The daemon may still be starting."
+                    error_msg += "\nCheck debug.log to see if 'Ready file created' appears."
+            except:
+                pass
+            
+            # Check debug.log
+            log_file = os.path.join(BASE_DIR, "debug.log")
+            if os.path.exists(log_file):
+                try:
+                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        lines = f.readlines()
+                        if lines:
+                            last_lines = ''.join(lines[-15:])  # Last 15 lines
+                            error_msg += f"\n\nLast log entries:\n{last_lines[:500]}"
+                except:
+                    pass
+            
+            messagebox.showerror("Error", f"{error_msg}\n\nPython: {python_cmd}\nScript: {script_path}\n\nTry stopping any existing daemon first, then start again.")
+        elif self.daemon_process.poll() is None:
+            # Process is still running but no lock file
+            error_msg = "Daemon process is running but failed to create lock file."
+            try:
+                # Check debug.log for errors
                 log_file = os.path.join(BASE_DIR, "debug.log")
                 if os.path.exists(log_file):
-                    try:
-                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                            lines = f.readlines()
-                            if lines:
-                                last_lines = ''.join(lines[-15:])  # Last 15 lines
-                                error_msg += f"\n\nLast log entries:\n{last_lines[:500]}"
-                    except:
-                        pass
-                messagebox.showerror("Error", f"{error_msg}\n\nPython: {python_cmd}\nScript: {script_path}\n\nCheck debug.log for details.")
-        except subprocess.TimeoutExpired:
-            messagebox.showerror("Error", f"Timeout waiting for daemon to start.\n\nPython: {python_cmd}\nScript: {script_path}")
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            messagebox.showerror("Error", f"Failed to start daemon: {e}\n\nDetails: {error_details[:500]}")
+                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        lines = f.readlines()
+                        if lines:
+                            last_lines = ''.join(lines[-15:])  # Last 15 lines
+                            error_msg += f"\n\nLast log entries:\n{last_lines[:500]}"
+                else:
+                    error_msg += "\n\nNo debug.log found - daemon may not have initialized."
+            except:
+                pass
+            messagebox.showerror("Error", f"{error_msg}\n\nPython: {python_cmd}\nScript: {script_path}\n\nCheck if all dependencies are installed and Tesseract OCR is installed.")
+        else:
+            # Process exited during wait
+            error_msg = "Process exited before creating lock file."
+            # Check debug.log
+            log_file = os.path.join(BASE_DIR, "debug.log")
+            if os.path.exists(log_file):
+                try:
+                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        lines = f.readlines()
+                        if lines:
+                            last_lines = ''.join(lines[-15:])  # Last 15 lines
+                            error_msg += f"\n\nLast log entries:\n{last_lines[:500]}"
+                except:
+                    pass
+            messagebox.showerror("Error", f"{error_msg}\n\nPython: {python_cmd}\nScript: {script_path}\n\nCheck debug.log for details.")
     
     def stop_daemon(self):
         """Stop the death counter daemon."""
