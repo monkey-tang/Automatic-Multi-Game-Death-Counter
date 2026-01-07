@@ -159,7 +159,7 @@ def find_python_executable(use_pythonw=False):
                     while True:
                         try:
                             version = winreg.EnumKey(key, i)
-                            install_path_key = winreg.OpenKey(key, f"{version}\InstallPath")
+                            install_path_key = winreg.OpenKey(key, f"{version}\\InstallPath")
                             try:
                                 install_path = winreg.QueryValueEx(install_path_key, "")[0]
                                 python_exe = os.path.join(install_path, exe_name)
@@ -291,6 +291,72 @@ def check_tesseract():
         pass
     return False, None
 
+def find_tesseract_tessdata():
+    """Find the Tesseract tessdata directory."""
+    # Default location
+    default_tessdata = r"C:\Program Files\Tesseract-OCR\tessdata"
+    if os.path.exists(default_tessdata):
+        return default_tessdata
+    
+    # Try to find from tesseract.exe path
+    tesseract_ok, tesseract_path = check_tesseract()
+    if tesseract_ok and tesseract_path != "tesseract":
+        # If tesseract.exe is at C:\Program Files\Tesseract-OCR\tesseract.exe
+        # tessdata should be at C:\Program Files\Tesseract-OCR\tessdata
+        tessdata_dir = os.path.join(os.path.dirname(tesseract_path), "tessdata")
+        if os.path.exists(tessdata_dir):
+            return tessdata_dir
+    
+    return None
+
+def check_japanese_lang_pack():
+    """Check if Japanese language pack is installed."""
+    tessdata_dir = find_tesseract_tessdata()
+    if not tessdata_dir:
+        return False, None
+    
+    jpn_file = os.path.join(tessdata_dir, "jpn.traineddata")
+    return os.path.exists(jpn_file), tessdata_dir
+
+def download_japanese_lang_pack(tessdata_dir, log_callback=None):
+    """Download Japanese language pack for Tesseract."""
+    jpn_file = os.path.join(tessdata_dir, "jpn.traineddata")
+    jpn_url = "https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata"
+    
+    try:
+        if log_callback:
+            log_callback("Downloading Japanese language pack for Tesseract...")
+            log_callback("Note: Japanese pack is required for reliable Sekiro detection (Japanese '死' character)")
+        
+        import urllib.request
+        import urllib.error
+        
+        # Download the file
+        urllib.request.urlretrieve(jpn_url, jpn_file)
+        
+        # Verify file was downloaded (should be > 1MB)
+        if os.path.exists(jpn_file) and os.path.getsize(jpn_file) > 1024 * 1024:
+            if log_callback:
+                log_callback("Japanese language pack downloaded successfully!")
+                log_callback("Sekiro detection is now fully supported!")
+            return True
+        else:
+            if log_callback:
+                log_callback("Warning: Downloaded file seems too small, may be corrupted")
+            return False
+            
+    except urllib.error.URLError as e:
+        if log_callback:
+            log_callback(f"Failed to download Japanese pack: {e}")
+            log_callback("You can manually download from:")
+            log_callback("https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata")
+            log_callback("Save it to: " + tessdata_dir)
+        return False
+    except Exception as e:
+        if log_callback:
+            log_callback(f"Error downloading Japanese pack: {e}")
+        return False
+
 def install_dependencies():
     """Install Python dependencies."""
     python_exe = find_python_executable()
@@ -338,6 +404,9 @@ class InstallerGUI:
         
         self.deps_status = ttk.Label(status_frame, text="Checking dependencies...")
         self.deps_status.grid(row=2, column=0, sticky=tk.W, pady=2)
+        
+        self.jpn_status = ttk.Label(status_frame, text="Checking Japanese pack...")
+        self.jpn_status.grid(row=3, column=0, sticky=tk.W, pady=2)
         
         log_frame = ttk.LabelFrame(main_frame, text="Log", padding="10")
         log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
@@ -410,8 +479,15 @@ class InstallerGUI:
         tesseract_ok, tesseract_path = check_tesseract()
         if tesseract_ok:
             self.tesseract_status.config(text="✓ Tesseract OCR: Found", foreground="green")
+            # Check for Japanese language pack
+            jpn_installed, tessdata_dir = check_japanese_lang_pack()
+            if jpn_installed:
+                self.jpn_status.config(text="✓ Japanese Pack: Installed (Sekiro ready)", foreground="green")
+            else:
+                self.jpn_status.config(text="⚠ Japanese Pack: Missing (recommended for Sekiro)", foreground="orange")
         else:
             self.tesseract_status.config(text="✗ Tesseract OCR: Not found (install from link below)", foreground="orange")
+            self.jpn_status.config(text="⚠ Japanese Pack: Check after Tesseract install", foreground="gray")
         
         try:
             import mss
@@ -519,6 +595,31 @@ class InstallerGUI:
                 self.log(f"Extracted {len(extracted)} files successfully!")
                 self.setup_complete = True
                 self.update_launch_button_state()
+                
+                # Check for Tesseract and Japanese language pack
+                tesseract_ok, tesseract_path = check_tesseract()
+                if tesseract_ok:
+                    jpn_installed, tessdata_dir = check_japanese_lang_pack()
+                    if not jpn_installed and tessdata_dir:
+                        self.log("Japanese language pack not found. Attempting auto-download...")
+                        self.log("Note: Japanese pack is required for reliable Sekiro detection (Japanese '死' character)")
+                        success = download_japanese_lang_pack(tessdata_dir, log_callback=self.log)
+                        if success:
+                            self.log("Japanese pack downloaded successfully! Sekiro detection is now fully supported!")
+                            # Refresh system check to update status
+                            self.root.after(100, self.check_system)
+                        else:
+                            self.log("Japanese pack auto-download failed. Manual download recommended for Sekiro.")
+                            self.log("Download from: https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata")
+                            self.log(f"Save to: {tessdata_dir}")
+                            # Refresh system check to show missing status
+                            self.root.after(100, self.check_system)
+                    elif jpn_installed:
+                        self.log("Japanese language pack already installed. Sekiro detection ready!")
+                    else:
+                        self.log("Note: Japanese pack is recommended for reliable Sekiro detection")
+                else:
+                    self.log("Tesseract not found. Install Tesseract first to enable Japanese pack download.")
             except Exception as e:
                 self.log(f"Error installing files: {e}")
                 messagebox.showerror("Error", f"Failed to install files: {e}")
