@@ -39,9 +39,13 @@
 
 - **DeathCounterInstaller.exe** - Latest installer executable (v1.5). This is the main file users should download. Uses Git LFS for large file storage.
 - **README.md** - This documentation file (you are here)
-- **.gitattributes** - Git LFS configuration for tracking large files
-- **.gitignore** - Git ignore rules for the repository
 - **cleanup_github_repo.ps1** - Utility script used to organize the repository structure
+
+**Git Configuration Files (Required at root level):**
+- **.gitattributes** - Git LFS (Large File Storage) configuration file. This file tells Git to use LFS for tracking large files like `.exe` files. It's required at the repository root for Git LFS to function properly. Without this file, large files would cause warnings or errors when pushing to GitHub.
+- **.gitignore** - Git ignore rules file. This file specifies which files and folders should be excluded from version control (e.g., temporary files, logs, lock files, Python cache). It's required at the repository root for Git to properly ignore unwanted files.
+
+*Note: These `.git*` files must remain at the root level of the repository. Git reads these configuration files from the repository root, and moving them to a subfolder would prevent them from working correctly.*
 
 ### Folders
 
