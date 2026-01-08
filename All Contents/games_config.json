@@ -1,0 +1,120 @@
+{
+  "settings": {
+    "tick_seconds": 0.3,
+    "debug_every_ticks": 30,
+    "consecutive_hits": 2,
+    "cooldown_seconds": 5.0,
+    "monitor_index": 1
+  },
+  "games": {
+    "Elden Ring": {
+      "region": {
+        "left": 520,
+        "top": 470,
+        "width": 880,
+        "height": 200
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "YOUDED",
+        "DIED"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "eldenring.exe",
+        "elden ring.exe"
+      ]
+    },
+    "Dark Souls 3": {
+      "region": {
+        "left": 520,
+        "top": 470,
+        "width": 880,
+        "height": 200
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "YOUD1ED",
+        "YOUDlED",
+        "YOUDI",
+        "OUDIED",
+        "YOUDIE0"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "darksoulsiii.exe",
+        "dark souls iii.exe"
+      ]
+    },
+    "Dark Souls Remastered": {
+      "region": {
+        "left": 520,
+        "top": 470,
+        "width": 880,
+        "height": 200
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "YOUD1ED",
+        "YOUDlED",
+        "YOUDI",
+        "OUDIED",
+        "YOUDIE0"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "darksoulsremastered.exe",
+        "dark souls remastered.exe"
+      ]
+    },
+    "Dark Souls II: Scholar of the First Sin": {
+      "region": {
+        "left": 520,
+        "top": 470,
+        "width": 880,
+        "height": 200
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "YOUD1ED",
+        "YOUDlED",
+        "YOUDI",
+        "OUDIED",
+        "YOUDIE0"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "darksoulsii.exe",
+        "dark souls ii.exe",
+        "darksouls2.exe"
+      ]
+    },
+    "Sekiro": {
+      "region": {
+        "left": 520,
+        "top": 470,
+        "width": 880,
+        "height": 200
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "DEATH"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "sekiro.exe"
+      ]
+    }
+  },
+  "current_game": "Dark Souls Remastered"
+}

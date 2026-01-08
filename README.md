@@ -51,7 +51,7 @@ All source code, scripts, and configuration files are located in the **`death co
 - Batch files and utilities
 
 ### Old Versions
-Previous installer versions (v1.1 - v1.5) are available in the **`old-versions`** branch.
+Previous installer versions (v1.1 - v1.6) are available in the **`old-versions`** branch.
 
 ## System Requirements
 
