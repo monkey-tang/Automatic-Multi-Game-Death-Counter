@@ -37,7 +37,7 @@ GUI_DEBUG_LOG = os.path.join(BASE_DIR, "gui_debug.log")  # Debug log for GUI
 SCRIPT_PATH = os.path.join(BASE_DIR, "multi_game_death_counter.py")
 # Backward compatibility: also try the old name if needed
 if not os.path.exists(SCRIPT_PATH):
-    SCRIPT_PATH = os.path.join(BASE_DIR, "1multi_game_death_counter.py")
+    SCRIPT_PATH = os.path.join(BASE_DIR, "multi_game_death_counter.py")
 DEATH_TXT = os.path.join(BASE_DIR, "death_counter.txt")
 
 

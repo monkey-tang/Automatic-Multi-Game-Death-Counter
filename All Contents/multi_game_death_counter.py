@@ -495,6 +495,45 @@ def find_monitor_for_window(window_rect: dict, monitors: List[dict]) -> Optional
     return None
 
 
+def is_window_fullscreen_or_borderless(window_rect: dict, monitor: dict, tolerance: int = 5) -> bool:
+    """
+    Determine if window is fullscreen or borderless (fills monitor).
+    Returns True if window size is within tolerance of monitor size.
+    This is used to auto-detect if we should use window-relative or monitor-relative capture.
+    
+    Args:
+        window_rect: Window rectangle dict with 'width' and 'height'
+        monitor: Monitor dict with 'width' and 'height'
+        tolerance: Pixel tolerance for size comparison (default 5px)
+    
+    Returns:
+        True if window appears to fill the monitor (fullscreen/borderless), False if windowed
+    """
+    try:
+        if not window_rect or not monitor:
+            return True  # Default to monitor mode if we can't determine
+        
+        window_width = window_rect.get('width', 0)
+        window_height = window_rect.get('height', 0)
+        monitor_width = monitor.get('width', 0)
+        monitor_height = monitor.get('height', 0)
+        
+        if monitor_width == 0 or monitor_height == 0:
+            return True  # Fallback to monitor mode
+        
+        # Check if window size is within tolerance of monitor size
+        width_diff = abs(window_width - monitor_width)
+        height_diff = abs(window_height - monitor_height)
+        
+        # If window is within tolerance pixels of monitor size, it's fullscreen/borderless
+        is_fullscreen = (width_diff <= tolerance and height_diff <= tolerance)
+        
+        return is_fullscreen
+    except Exception:
+        # If anything fails, default to monitor mode (safe fallback)
+        return True
+
+
 def detect_game(games: Dict) -> Optional[str]:
     """
     Auto-detect which game is currently running by checking process names.
@@ -526,10 +565,19 @@ def detect_game(games: Dict) -> Optional[str]:
 # =========================
 # IMAGE PROCESSING
 # =========================
-def grab_region(sct: mss, monitor_index: int, region: dict, game_config: Dict = None) -> Image.Image:
+def grab_region(sct: mss, monitor_index: int, region: dict, game_config: Dict = None, window_rect: Optional[dict] = None) -> Image.Image:
     """
-    Capture a region from the specified monitor.
+    Capture a region from the specified monitor or game window.
     Supports both absolute pixel coordinates and percentage-based coordinates for multi-resolution support.
+    Automatically detects if window is fullscreen/borderless (uses monitor-relative) or windowed (uses window-relative).
+    
+    Args:
+        sct: MSS screenshot context
+        monitor_index: Monitor index to use (fallback if window detection fails)
+        region: Region configuration dict
+        game_config: Optional game configuration dict
+        window_rect: Optional window rectangle dict (if None, uses monitor-based capture)
+    
     Note: Monitor auto-detection is now handled in the main loop with throttling
     to prevent race conditions. This function just uses the provided monitor_index.
     """
@@ -550,6 +598,38 @@ def grab_region(sct: mss, monitor_index: int, region: dict, game_config: Dict = 
     mon_width = mon["width"]
     mon_height = mon["height"]
     
+    # Auto-detect if we should use window-relative or monitor-relative capture
+    use_windowed_mode = False
+    if window_rect:
+        try:
+            # Check if window is fullscreen/borderless or windowed
+            is_fullscreen = is_window_fullscreen_or_borderless(window_rect, mon)
+            use_windowed_mode = not is_fullscreen
+            
+            window_width = window_rect.get('width', 0)
+            window_height = window_rect.get('height', 0)
+            mon_width = mon.get('width', 0)
+            mon_height = mon.get('height', 0)
+            
+            # Only log window detection on first use or when mode changes (reduce spam)
+            # Logging happens in main loop when window is first detected
+            
+            if use_windowed_mode:
+                # Validate window dimensions before using windowed mode
+                # If window is too small or invalid, fallback to monitor mode
+                if window_width < 100 or window_height < 100:
+                    log(f"WARNING: Window too small ({window_width}x{window_height}), falling back to monitor mode")
+                    use_windowed_mode = False
+        except Exception as e:
+            # If anything fails in windowed detection, fallback to monitor mode (safe)
+            log(f"WARNING: Error in windowed mode detection: {e}, falling back to monitor mode")
+            import traceback
+            log(traceback.format_exc())
+            use_windowed_mode = False
+    else:
+        # Only log on first use (reduce spam) - window detection happens in main loop
+        pass
+    
     # Check if region uses percentage-based coordinates (0.0-1.0) or absolute pixels
     use_percentages = False
     if "use_percentages" in region:
@@ -568,42 +648,111 @@ def grab_region(sct: mss, monitor_index: int, region: dict, game_config: Dict = 
             0 < width_val <= 1 and 0 < height_val <= 1):
             use_percentages = True
     
-    if use_percentages:
-        # Convert percentage-based coordinates to absolute pixels
-        # Percentages are relative to monitor resolution - works on ANY resolution including ultrawide!
-        abs_region = {
-            "left": int(mon["left"] + region["left"] * mon_width),
-            "top": int(mon["top"] + region["top"] * mon_height),
-            "width": int(region["width"] * mon_width),
-            "height": int(region["height"] * mon_height),
-        }
-        # Only log on first use or when monitor resolution changes (to avoid spam)
-        # This will be logged elsewhere if needed for debugging
-    else:
-        # Use absolute pixel coordinates (legacy mode)
-        # Scale based on a reference resolution (1920x1080) if base_resolution is provided
-        base_width = region.get("base_resolution_width", None)
-        base_height = region.get("base_resolution_height", None)
-        
-        if base_width and base_height:
-            # Scale region proportionally from base resolution to actual monitor resolution
-            scale_x = mon_width / base_width
-            scale_y = mon_height / base_height
+    # Calculate region coordinates
+    if use_windowed_mode:
+        # WINDOWED MODE: Calculate region relative to window position and size
+        try:
+            window_left = window_rect.get('left', 0)
+            window_top = window_rect.get('top', 0)
+            window_width = window_rect.get('width', mon_width)
+            window_height = window_rect.get('height', mon_height)
+            
+            if use_percentages:
+                # Percentages relative to window size
+                region_left = int(window_left + region["left"] * window_width)
+                region_top = int(window_top + region["top"] * window_height)
+                region_width = int(region["width"] * window_width)
+                region_height = int(region["height"] * window_height)
+            else:
+                # Absolute pixel coordinates - need to scale from reference resolution
+                # Default reference resolution is 1920x1080 (common fullscreen resolution)
+                base_width = region.get("base_resolution_width", 1920)
+                base_height = region.get("base_resolution_height", 1080)
+                
+                # Scale region proportionally from base resolution to window size
+                scale_x = window_width / base_width
+                scale_y = window_height / base_height
+                region_left = int(window_left + region["left"] * scale_x)
+                region_top = int(window_top + region["top"] * scale_y)
+                region_width = int(region["width"] * scale_x)
+                region_height = int(region["height"] * scale_y)
+                
+                # Only log scaling on first use or when window size changes (reduce spam)
+                # Detailed logging happens in main loop when window is first detected
+            
+            # Clamp region to window bounds (prevent capturing outside window)
+            region_left = max(window_left, region_left)
+            region_top = max(window_top, region_top)
+            region_right = min(window_left + window_width, region_left + region_width)
+            region_bottom = min(window_top + window_height, region_top + region_height)
+            region_width = max(0, region_right - region_left)
+            region_height = max(0, region_bottom - region_top)
+            
+            # Clamp region to monitor bounds (prevent capturing outside visible area)
+            region_left = max(mon["left"], region_left)
+            region_top = max(mon["top"], region_top)
+            region_right = min(mon["left"] + mon_width, region_left + region_width)
+            region_bottom = min(mon["top"] + mon_height, region_top + region_height)
+            region_width = max(0, region_right - region_left)
+            region_height = max(0, region_bottom - region_top)
+            
+            # If region is invalid after clamping, fallback to monitor mode
+            if region_width <= 0 or region_height <= 0:
+                log(f"WARNING: Windowed mode region invalid after clamping (width={region_width}, height={region_height}), falling back to monitor mode")
+                use_windowed_mode = False
+            else:
+                abs_region = {
+                    "left": region_left,
+                    "top": region_top,
+                    "width": region_width,
+                    "height": region_height,
+                }
+                # Only log on first use or when position changes significantly (reduce spam)
+                # Detailed logging happens in main loop when window is first detected
+        except Exception as e:
+            # If anything fails in windowed calculation, fallback to monitor mode
+            log(f"WARNING: Error calculating windowed region: {e}, falling back to monitor mode")
+            use_windowed_mode = False
+    
+    # MONITOR MODE: Calculate region relative to monitor (original behavior)
+    if not use_windowed_mode:
+        # Only log on first use (reduce spam) - logging happens in main loop
+        if use_percentages:
+            # Convert percentage-based coordinates to absolute pixels
+            # Percentages are relative to monitor resolution - works on ANY resolution including ultrawide!
             abs_region = {
-                "left": int(mon["left"] + region["left"] * scale_x),
-                "top": int(mon["top"] + region["top"] * scale_y),
-                "width": int(region["width"] * scale_x),
-                "height": int(region["height"] * scale_y),
+                "left": int(mon["left"] + region["left"] * mon_width),
+                "top": int(mon["top"] + region["top"] * mon_height),
+                "width": int(region["width"] * mon_width),
+                "height": int(region["height"] * mon_height),
             }
-            log(f"Scaled region from {base_width}x{base_height} to {mon_width}x{mon_height}: {region} -> {abs_region}")
+            # Only log on first use or when monitor resolution changes (to avoid spam)
+            # This will be logged elsewhere if needed for debugging
         else:
-            # No scaling - use absolute coordinates as-is (legacy behavior)
-            abs_region = {
-                "left": mon["left"] + region["left"],
-                "top": mon["top"] + region["top"],
-                "width": region["width"],
-                "height": region["height"],
-            }
+            # Use absolute pixel coordinates (legacy mode)
+            # Scale based on a reference resolution (1920x1080) if base_resolution is provided
+            base_width = region.get("base_resolution_width", None)
+            base_height = region.get("base_resolution_height", None)
+            
+            if base_width and base_height:
+                # Scale region proportionally from base resolution to actual monitor resolution
+                scale_x = mon_width / base_width
+                scale_y = mon_height / base_height
+                abs_region = {
+                    "left": int(mon["left"] + region["left"] * scale_x),
+                    "top": int(mon["top"] + region["top"] * scale_y),
+                    "width": int(region["width"] * scale_x),
+                    "height": int(region["height"] * scale_y),
+                }
+                log(f"Scaled region from {base_width}x{base_height} to {mon_width}x{mon_height}: {region} -> {abs_region}")
+            else:
+                # No scaling - use absolute coordinates as-is (legacy behavior)
+                abs_region = {
+                    "left": mon["left"] + region["left"],
+                    "top": mon["top"] + region["top"],
+                    "width": region["width"],
+                    "height": region["height"],
+                }
     
     # Capture at full quality (mss captures at native resolution)
     grab = sct.grab(abs_region)
@@ -924,9 +1073,14 @@ def main_loop():
         
         # Auto-detection check interval (check every 30 ticks = ~9 seconds at 0.3s tick)
         auto_detect_interval = 30
+        # Window position update interval (check every 10 ticks = ~3 seconds for responsive movement)
+        # More frequent than monitor detection, but not every tick to avoid performance issues
+        window_update_interval = 10
         last_auto_detect_tick = 0
         last_monitor_detect_tick = 0
+        last_window_update_tick = 0
         cached_monitor_index = monitor_index  # Cache the detected monitor
+        cached_window_rect = None  # Cache the detected window rect for windowed mode support
         
         # Flag to track if daemon has fully started (only run monitor detection after this)
         daemon_started = False
@@ -974,6 +1128,7 @@ def main_loop():
                         config["games"][current_game_name] = game_config
                         save_config(config)
                     cached_monitor_index = monitor_index  # Reset cache when game changes
+                    cached_window_rect = None  # Reset window cache when game changes (will be detected on next check)
                     region = game_config.get("region", {})
                     keywords = game_config.get("keywords", ["YOUDIED"])
                     tesseract_config = game_config.get("tesseract_config", "--oem 3 --psm 7")
@@ -988,18 +1143,59 @@ def main_loop():
                     if game_process:
                         window_rect = get_window_rect(game_process)
                         if window_rect:
+                            # Detect which monitor contains the window (only update monitor, not window position)
                             detected_monitor = find_monitor_for_window(window_rect, sct.monitors)
                             if detected_monitor is not None and detected_monitor != cached_monitor_index:
                                 log(f"Auto-detected monitor {detected_monitor} for game window (was using {cached_monitor_index})")
                                 cached_monitor_index = detected_monitor
-                except Exception:
+                        else:
+                            # Window not found - clear cache and fallback to monitor mode
+                            cached_window_rect = None
+                            log("Window not found for game process, using monitor mode")
+                    else:
+                        log("Game process not found, using monitor mode")
+                except Exception as e:
                     # Fall back to configured monitor if auto-detection fails
-                    pass
+                    # Clear window cache on error to ensure we use monitor mode
+                    cached_window_rect = None
+                    log(f"Window detection error (using monitor mode): {e}")
                 last_monitor_detect_tick = state["tick"]
             
+            # Update window position periodically when in windowed mode (for responsive window movement)
+            # Check more frequently than monitor detection (every 10 ticks = ~3s) but not every tick for performance
+            if daemon_started and state["tick"] - last_window_update_tick >= window_update_interval:
+                try:
+                    game_process = get_game_process(game_config)
+                    if game_process:
+                        window_rect = get_window_rect(game_process)
+                        if window_rect:
+                            # Check if this is first detection or window moved
+                            if cached_window_rect is None:
+                                # First time detecting window - log it
+                                log(f"Window detected: pos=({window_rect.get('left', 0)}, {window_rect.get('top', 0)}) size={window_rect.get('width', 0)}x{window_rect.get('height', 0)}")
+                                cached_window_rect = window_rect
+                            else:
+                                # Check if window position changed
+                                old_pos = (cached_window_rect.get('left', 0), cached_window_rect.get('top', 0))
+                                new_pos = (window_rect.get('left', 0), window_rect.get('top', 0))
+                                if old_pos != new_pos:
+                                    log(f"Window moved: {old_pos} -> {new_pos}, updating capture region")
+                                # Always update cached window rect with latest position
+                                cached_window_rect = window_rect
+                        else:
+                            # Window disappeared - clear cache
+                            if cached_window_rect is not None:
+                                log("Window disappeared, falling back to monitor mode")
+                            cached_window_rect = None
+                except Exception:
+                    # Silently fail - keep using cached position if available
+                    pass
+                last_window_update_tick = state["tick"]
+            
             try:
-                # Capture region using cached monitor index (no EnumWindows call here)
-                img_rgb = grab_region(sct, cached_monitor_index, region)
+                # Capture region using cached monitor index and window rect (if available)
+                # Window rect is passed for automatic windowed mode detection
+                img_rgb = grab_region(sct, cached_monitor_index, region, game_config, cached_window_rect)
                 
                 # Save debug images periodically
                 save_debug = (state["tick"] % settings["debug_every_ticks"] == 0)
