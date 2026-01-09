@@ -120,7 +120,7 @@ To rebuild the installer from source:
 
 1. Ensure all source files are in the `Edit/` folder
 2. Run `build_single_file.py` to create `DeathCounter_Installer_Standalone.py`
-3. Use PyInstaller to compile: `pyinstaller --onefile --windowed --name DeathCounterInstaller DeathCounter_Installer_Standalone.py`
+3. Use PyInstaller to compile: `pyinstaller --onefile --windowed --collect-all tkinter --name DeathCounterInstaller DeathCounter_Installer_Standalone.py`
 4. The compiled `.exe` will be in the `dist/` folder
 
 ## License

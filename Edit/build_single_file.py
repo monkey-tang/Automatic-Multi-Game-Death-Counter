@@ -925,7 +925,7 @@ if __name__ == "__main__":
     print(f"\nCreated standalone installer: {output_path}")
     print("\nTo create a single .exe file, run:")
     print("  pip install pyinstaller")
-    print(f"  pyinstaller --onefile --windowed --name DeathCounterInstaller {output_path}")
+    print(f"  pyinstaller --onefile --windowed --collect-all tkinter --name DeathCounterInstaller {output_path}")
     
     return output_path
 
