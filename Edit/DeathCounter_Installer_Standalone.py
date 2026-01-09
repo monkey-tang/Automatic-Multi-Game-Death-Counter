@@ -46,6 +46,29 @@ import subprocess
 import shutil
 import tempfile
 from pathlib import Path
+
+# Fix Tcl/Tk version conflicts by using system Tcl/Tk when available
+# This must be done BEFORE importing tkinter
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    try:
+        # Try to find system Python's Tcl/Tk
+        python_exe = sys.executable
+        if python_exe and os.path.exists(python_exe):
+            python_dir = os.path.dirname(python_exe)
+            python_lib = os.path.join(python_dir, 'Lib')
+            tkinter_path = os.path.join(python_lib, 'tkinter')
+            
+            if os.path.exists(tkinter_path):
+                tcl_path = os.path.join(tkinter_path, 'tcl')
+                tk_path = os.path.join(tkinter_path, 'tk')
+                
+                # Use system Tcl/Tk if available (works with Python 3.8-3.13)
+                if os.path.exists(tcl_path) and os.path.exists(tk_path):
+                    os.environ['TCL_LIBRARY'] = tcl_path
+                    os.environ['TK_LIBRARY'] = tk_path
+    except Exception:
+        pass  # Fall back to bundled Tcl/Tk if system version not found
+
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import threading
