@@ -1327,4 +1327,3 @@ if __name__ == "__main__":
         release_lock()
         log("Daemon shutdown complete.")
         print("Daemon shutdown complete.")
-
