@@ -48,7 +48,7 @@ import tempfile
 from pathlib import Path
 
 # CRITICAL: Fix Tcl/Tk version conflicts BEFORE importing tkinter
-# This must be done for maximum compatibility across Python 3.8-3.13
+# This must be done for maximum compatibility across Python 3.8-3.12
 def setup_tcl_tk_environment():
     """Set up Tcl/Tk environment variables to use system Python's Tcl/Tk.
     This prevents version conflicts when running as PyInstaller bundle."""
@@ -103,7 +103,7 @@ def setup_tcl_tk_environment():
                         if os.path.exists(tcl_path) and os.path.exists(tk_path):
                             init_tcl = os.path.join(tcl_path, 'init.tcl')
                             if os.path.exists(init_tcl):
-                                # Use system Tcl/Tk (works with Python 3.8-3.13)
+                                # Use system Tcl/Tk (works with Python 3.8-3.12)
                                 tcl_abs = os.path.abspath(tcl_path)
                                 tk_abs = os.path.abspath(tk_path)
                                 os.environ['TCL_LIBRARY'] = tcl_abs
@@ -348,7 +348,7 @@ def find_python_executable(use_pythonw=False):
     return None
 
 def is_python_version_compatible(python_exe):
-    """Check if Python version is compatible (3.8-3.13)."""
+    """Check if Python version is compatible (3.8-3.12)."""
     try:
         result = subprocess.run(
             [python_exe, '--version'],
@@ -364,8 +364,8 @@ def is_python_version_compatible(python_exe):
             if match:
                 major = int(match.group(1))
                 minor = int(match.group(2))
-                # Check if version is 3.8-3.13
-                if major == 3 and 8 <= minor <= 13:
+                # Check if version is 3.8-3.12 (3.13 has Tcl/Tk compatibility issues)
+                if major == 3 and 8 <= minor <= 12:
                     return True
     except:
         pass
@@ -711,12 +711,12 @@ class InstallerGUI:
             if is_compatible:
                 self.python_status.config(text=f"✓ Python: {python_version}", foreground="green")
             else:
-                self.python_status.config(text=f"⚠ Python: {python_version} (Requires 3.8-3.13)", foreground="orange")
+                self.python_status.config(text=f"⚠ Python: {python_version} (Requires 3.8-3.12)", foreground="orange")
                 messagebox.showwarning("Python Version Warning", 
                     f"Your Python version ({python_version}) may not be fully compatible.\n\n"
-                    "This application requires Python 3.8-3.13 for optimal compatibility.\n\n"
+                    "This application requires Python 3.8-3.12 for optimal compatibility.\n\n"
                     "Please install a compatible Python version from:\n"
-                    "https://www.python.org/downloads/\n\n"
+                    "https://www.python.org/downloads/release/python-3121/\n\n"
                     "The application may still work, but some features may not function correctly.")
         else:
             self.python_status.config(text="✗ Python not found", foreground="red")
@@ -776,11 +776,11 @@ class InstallerGUI:
     
     def install_python(self):
         """Open Python download page."""
-        self.log("Opening Python download page...")
-        webbrowser.open("https://www.python.org/downloads/")
-        self.log("Python download page opened. After installing, restart this installer.")
+        self.log("Opening Python 3.12.1 download page...")
+        webbrowser.open("https://www.python.org/downloads/release/python-3121/")
+        self.log("Python 3.12.1 download page opened. After installing, restart this installer.")
         messagebox.showinfo("Python Installation", 
-                          "After installing Python, please:\n"
+                          "After installing Python 3.12.1, please:\n"
                           "1. Check 'Add Python to PATH' during installation\n"
                           "2. Restart this installer")
     
