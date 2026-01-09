@@ -51,23 +51,71 @@ from pathlib import Path
 # This must be done BEFORE importing tkinter
 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
     try:
-        # Try to find system Python's Tcl/Tk
-        python_exe = sys.executable
-        if python_exe and os.path.exists(python_exe):
-            python_dir = os.path.dirname(python_exe)
-            python_lib = os.path.join(python_dir, 'Lib')
-            tkinter_path = os.path.join(python_lib, 'tkinter')
-            
-            if os.path.exists(tkinter_path):
-                tcl_path = os.path.join(tkinter_path, 'tcl')
-                tk_path = os.path.join(tkinter_path, 'tk')
+        # Strategy 1: Try to find system Python's Tcl/Tk from common locations
+        # Check multiple possible Python installation paths
+        possible_python_paths = []
+        
+        # Check if Python is in PATH
+        try:
+            result = subprocess.run(['python', '--version'], capture_output=True, text=True, timeout=2)
+            if result.returncode == 0:
+                # Find Python executable
+                python_exe = shutil.which('python')
+                if python_exe:
+                    possible_python_paths.append(python_exe)
+        except:
+            pass
+        
+        # Check common Python installation locations
+        common_paths = [
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs', 'Python'),
+            os.path.join(os.environ.get('PROGRAMFILES', ''), 'Python'),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)', ''), 'Python'),
+        ]
+        
+        for base_path in common_paths:
+            if os.path.exists(base_path):
+                for item in os.listdir(base_path):
+                    python_dir = os.path.join(base_path, item)
+                    if os.path.isdir(python_dir):
+                        python_exe = os.path.join(python_dir, 'python.exe')
+                        if os.path.exists(python_exe):
+                            possible_python_paths.append(python_exe)
+        
+        # Try each Python installation to find Tcl/Tk
+        for python_exe in possible_python_paths:
+            try:
+                python_dir = os.path.dirname(python_exe)
+                python_lib = os.path.join(python_dir, 'Lib')
+                tkinter_path = os.path.join(python_lib, 'tkinter')
                 
-                # Use system Tcl/Tk if available (works with Python 3.8-3.13)
-                if os.path.exists(tcl_path) and os.path.exists(tk_path):
-                    os.environ['TCL_LIBRARY'] = tcl_path
-                    os.environ['TK_LIBRARY'] = tk_path
+                if os.path.exists(tkinter_path):
+                    tcl_path = os.path.join(tkinter_path, 'tcl')
+                    tk_path = os.path.join(tkinter_path, 'tk')
+                    
+                    # Verify Tcl/Tk directories exist and contain init files
+                    if os.path.exists(tcl_path) and os.path.exists(tk_path):
+                        init_tcl = os.path.join(tcl_path, 'init.tcl')
+                        if os.path.exists(init_tcl):
+                            # Use system Tcl/Tk (works with Python 3.8-3.13)
+                            os.environ['TCL_LIBRARY'] = tcl_path
+                            os.environ['TK_LIBRARY'] = tk_path
+                            break  # Found working Tcl/Tk, stop searching
+            except Exception:
+                continue  # Try next Python installation
+        
+        # Strategy 2: If no system Tcl/Tk found, ensure bundled version works
+        # PyInstaller should have bundled Tcl/Tk in _MEIPASS
+        if 'TCL_LIBRARY' not in os.environ or 'TK_LIBRARY' not in os.environ:
+            meipass = getattr(sys, '_MEIPASS', '')
+            if meipass:
+                bundled_tcl = os.path.join(meipass, '_internal', 'tcl')
+                bundled_tk = os.path.join(meipass, '_internal', 'tk')
+                if os.path.exists(bundled_tcl) and os.path.exists(bundled_tk):
+                    os.environ['TCL_LIBRARY'] = bundled_tcl
+                    os.environ['TK_LIBRARY'] = bundled_tk
     except Exception:
-        pass  # Fall back to bundled Tcl/Tk if system version not found
+        pass  # Fall back to default behavior
 
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
