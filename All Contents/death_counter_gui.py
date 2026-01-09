@@ -17,14 +17,17 @@ import shutil
 
 # Fix Tcl/Tk version conflicts by using system Tcl/Tk when available
 # This must be done BEFORE importing tkinter
+# CRITICAL: Set these environment variables before any tkinter import
 try:
-    # Try to find system Python's Tcl/Tk
+    # Get the Python executable path
     python_exe = sys.executable
     if python_exe and os.path.exists(python_exe):
-        python_dir = os.path.dirname(python_exe)
+        # Get Python installation directory
+        python_dir = os.path.dirname(os.path.abspath(python_exe))
         python_lib = os.path.join(python_dir, 'Lib')
         tkinter_path = os.path.join(python_lib, 'tkinter')
         
+        # Check if tkinter directory exists
         if os.path.exists(tkinter_path):
             tcl_path = os.path.join(tkinter_path, 'tcl')
             tk_path = os.path.join(tkinter_path, 'tk')
@@ -33,11 +36,22 @@ try:
             if os.path.exists(tcl_path) and os.path.exists(tk_path):
                 init_tcl = os.path.join(tcl_path, 'init.tcl')
                 if os.path.exists(init_tcl):
-                    # Use system Tcl/Tk (works with Python 3.8-3.13)
-                    os.environ['TCL_LIBRARY'] = tcl_path
-                    os.environ['TK_LIBRARY'] = tk_path
-except Exception:
-    pass  # Fall back to default behavior
+                    # CRITICAL: Set environment variables to use system Tcl/Tk
+                    # This prevents PyInstaller bundled Tcl from being used
+                    os.environ['TCL_LIBRARY'] = os.path.abspath(tcl_path)
+                    os.environ['TK_LIBRARY'] = os.path.abspath(tk_path)
+                    # Also try setting TCL_LIBRARY_PATH and TK_LIBRARY_PATH
+                    os.environ['TCL_LIBRARY_PATH'] = os.path.abspath(tcl_path)
+                    os.environ['TK_LIBRARY_PATH'] = os.path.abspath(tk_path)
+except Exception as e:
+    # If detection fails, try to continue - but log if possible
+    try:
+        import traceback
+        with open(os.path.join(os.path.dirname(__file__), 'tcl_tk_detection_error.log'), 'w') as f:
+            f.write(f"Tcl/Tk detection error: {e}\n")
+            f.write(traceback.format_exc())
+    except:
+        pass  # Can't even log, just continue
 
 from tkinter import *
 from tkinter import ttk, messagebox
