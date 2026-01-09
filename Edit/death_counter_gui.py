@@ -18,36 +18,46 @@ import shutil
 # Fix Tcl/Tk version conflicts by using system Tcl/Tk when available
 # This must be done BEFORE importing tkinter
 # CRITICAL: Set these environment variables before any tkinter import
-try:
-    # Get the Python executable path
-    python_exe = sys.executable
-    if python_exe and os.path.exists(python_exe):
-        # Get Python installation directory
-        python_dir = os.path.dirname(os.path.abspath(python_exe))
-        python_lib = os.path.join(python_dir, 'Lib')
-        tkinter_path = os.path.join(python_lib, 'tkinter')
-        
-        # Check if tkinter directory exists
-        if os.path.exists(tkinter_path):
-            tcl_path = os.path.join(tkinter_path, 'tcl')
-            tk_path = os.path.join(tkinter_path, 'tk')
+# Only run this if NOT running as a PyInstaller bundle (frozen=False)
+if not getattr(sys, 'frozen', False):
+    try:
+        # Get the Python executable path
+        python_exe = sys.executable
+        if python_exe and os.path.exists(python_exe):
+            # Get Python installation directory
+            python_dir = os.path.dirname(os.path.abspath(python_exe))
+            python_lib = os.path.join(python_dir, 'Lib')
+            tkinter_path = os.path.join(python_lib, 'tkinter')
             
-            # Verify Tcl/Tk directories exist and contain init files
-            if os.path.exists(tcl_path) and os.path.exists(tk_path):
-                init_tcl = os.path.join(tcl_path, 'init.tcl')
-                if os.path.exists(init_tcl):
-                    # CRITICAL: Set environment variables to use system Tcl/Tk
-                    # This prevents PyInstaller bundled Tcl from being used
-                    os.environ['TCL_LIBRARY'] = os.path.abspath(tcl_path)
-                    os.environ['TK_LIBRARY'] = os.path.abspath(tk_path)
-                    # Also try setting TCL_LIBRARY_PATH and TK_LIBRARY_PATH
-                    os.environ['TCL_LIBRARY_PATH'] = os.path.abspath(tcl_path)
-                    os.environ['TK_LIBRARY_PATH'] = os.path.abspath(tk_path)
+            # Check if tkinter directory exists
+            if os.path.exists(tkinter_path):
+                tcl_path = os.path.join(tkinter_path, 'tcl')
+                tk_path = os.path.join(tkinter_path, 'tk')
+                
+                # Verify Tcl/Tk directories exist and contain init files
+                if os.path.exists(tcl_path) and os.path.exists(tk_path):
+                    init_tcl = os.path.join(tcl_path, 'init.tcl')
+                    if os.path.exists(init_tcl):
+                        # CRITICAL: Set environment variables to use system Tcl/Tk
+                        # Use absolute paths to ensure they're used
+                        tcl_abs = os.path.abspath(tcl_path)
+                        tk_abs = os.path.abspath(tk_path)
+                        os.environ['TCL_LIBRARY'] = tcl_abs
+                        os.environ['TK_LIBRARY'] = tk_abs
+                        # Clear any PyInstaller temp directory references
+                        if 'TCL_LIBRARY_PATH' in os.environ:
+                            del os.environ['TCL_LIBRARY_PATH']
+                        if 'TK_LIBRARY_PATH' in os.environ:
+                            del os.environ['TK_LIBRARY_PATH']
+                        # Force tkinter to use these paths
+                        os.environ['TCL_LIBRARY_PATH'] = tcl_abs
+                        os.environ['TK_LIBRARY_PATH'] = tk_abs
 except Exception as e:
     # If detection fails, try to continue - but log if possible
     try:
         import traceback
-        with open(os.path.join(os.path.dirname(__file__), 'tcl_tk_detection_error.log'), 'w') as f:
+        error_log = os.path.join(os.path.dirname(__file__), 'tcl_tk_detection_error.log')
+        with open(error_log, 'w') as f:
             f.write(f"Tcl/Tk detection error: {e}\n")
             f.write(traceback.format_exc())
     except:
