@@ -11,4 +11,3 @@ powershell -Command "$host.UI.RawUI.WindowPosition = New-Object System.Managemen
 python multi_game_death_counter.py
 
 pause
-
