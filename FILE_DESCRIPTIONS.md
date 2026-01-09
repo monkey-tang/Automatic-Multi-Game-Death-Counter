@@ -23,4 +23,3 @@ Simple descriptions for GitHub file explorer reference:
 - **Debug.Test/** - Debug and testing utilities for troubleshooting.
 
 - **Edit/** - Development scripts and source files for building the installer.
-
