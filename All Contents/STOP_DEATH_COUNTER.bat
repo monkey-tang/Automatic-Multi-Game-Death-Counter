@@ -21,4 +21,3 @@ if exist daemon.lock (
 
 if exist STOP del STOP >nul 2>&1
 pause
-
