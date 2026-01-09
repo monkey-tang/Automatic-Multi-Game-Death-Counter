@@ -1,0 +1,62 @@
+========================================
+INSTALLER BUILD INSTRUCTIONS
+========================================
+
+The commands may not show output in the terminal, but they should still work.
+Here's how to build the installer:
+
+METHOD 1: Using Batch File (Easiest)
+------------------------------------
+1. Open File Explorer
+2. Navigate to: C:\Users\Nicholas\Desktop\DEATHCOUNTER v2
+3. Double-click: BUILD_INSTALLER.bat
+4. Wait for build to complete (may take 2-5 minutes)
+5. Check dist\DeathCounterInstaller.exe when done
+
+METHOD 2: Using Command Prompt
+--------------------------------
+1. Open Command Prompt (cmd.exe)
+2. Run:
+   cd /d "C:\Users\Nicholas\Desktop\DEATHCOUNTER v2"
+   BUILD_INSTALLER.bat
+
+METHOD 3: Using Python Directly
+---------------------------------
+1. Open Command Prompt
+2. Run:
+   cd /d "C:\Users\Nicholas\Desktop\DEATHCOUNTER v2"
+   python -m PyInstaller --onefile --windowed --name "DeathCounterInstaller" --add-data "multi_game_death_counter.py;." --add-data "death_counter_gui.py;." --add-data "death_counter_settings.py;." --add-data "log_monitor.py;." --add-data "memory_scanner.py;." --add-data "games_config.json;." --add-data "reset_death_counter.py;." --add-data "switch_game_manual.py;." --add-data "capture_debug_once.py;." --add-data "change_monitor_id.py;." --add-data "requirements.txt;." --add-data "README.md;." --add-data "FUZZY_MATCHING_GUIDE.md;." --hidden-import "tkinter" --hidden-import "tkinter.ttk" --hidden-import "tkinter.filedialog" --hidden-import "tkinter.messagebox" --noconfirm --clean installer.py
+
+VERIFICATION
+------------
+After building, verify the installer exists:
+- Location: dist\DeathCounterInstaller.exe
+- Size: Should be ~20-30 MB
+- Type: Single executable file
+
+WHAT'S INCLUDED
+---------------
+The installer bundles all files listed in installer.py EMBEDDED_FILES:
+- All Python scripts (9 core files)
+- games_config.json
+- requirements.txt
+- README.md
+- FUZZY_MATCHING_GUIDE.md
+
+All fixes are included:
+✓ Fuzzy OCR matching
+✓ Settings GUI
+✓ Log monitoring
+✓ Memory scanning
+✓ No "nicholas" references
+✓ All error handling improvements
+
+TROUBLESHOOTING
+---------------
+If build fails:
+1. Ensure Python is installed: python --version
+2. Install PyInstaller: python -m pip install pyinstaller
+3. Check all essential files exist in the directory
+4. Try running from Command Prompt instead of PowerShell
+
+========================================
