@@ -25,7 +25,14 @@
       "process_names": [
         "eldenring.exe",
         "elden ring.exe"
-      ]
+      ],
+      "ocr_upscale_factor": 3.0,
+      "ocr_interpolation": "LANCZOS4",
+      "ocr_adaptive_block_size": 17,
+      "ocr_adaptive_c": 3,
+      "ocr_use_clahe": true,
+      "ocr_morphology_kernel": 3,
+      "ocr_coverage_threshold": 0.003
     },
     "Dark Souls 3": {
       "region": {
