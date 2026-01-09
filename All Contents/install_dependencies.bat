@@ -18,4 +18,3 @@ echo Download from: https://github.com/UB-Mannheim/tesseract/wiki
 echo Default path: C:\Program Files\Tesseract-OCR\tesseract.exe
 echo.
 pause
-
