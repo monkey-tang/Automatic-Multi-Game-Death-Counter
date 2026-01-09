@@ -56,7 +56,7 @@
 Contains all the main application files and resources needed to run the Death Counter. These are the files extracted by the `DeathCounterInstaller.exe` and are essential for the daemon and GUI to function. Includes:
 - `multi_game_death_counter.py` - Main daemon script that performs screen capture, OCR detection, and death counting
 - `death_counter_gui.py` - GUI application for controlling the daemon and viewing death statistics
-- `games_config.json` - Configuration file defining game-specific settings (capture regions, keywords, process names)
+- `games_config.json` - Configuration file defining game-specific settings (capture regions, keywords, process names, OCR preprocessing settings). OCR settings are configurable per game for optimal accuracy.
 - `switch_game_manual.py` - Script for manually switching between games
 - `change_monitor_id.py` - Utility for changing monitor detection settings
 - `capture_debug_once.py` - Debug utility for capturing a single screen region for testing
@@ -81,7 +81,7 @@ Contains development scripts and source files used to build and maintain the ins
 The Death Counter uses Optical Character Recognition (OCR) to detect "YOU DIED" messages on screen:
 
 1. **Screen Capture**: Continuously captures a specific region of the screen where death messages appear
-2. **Image Processing**: Preprocesses the captured image (upscaling, sharpening, color masking) for better OCR accuracy
+2. **Image Processing**: Preprocesses the captured image (upscaling, sharpening, color masking, contrast enhancement) for better OCR accuracy. All OCR preprocessing settings are configurable per game in `games_config.json` for maximum accuracy.
 3. **OCR Detection**: Uses Tesseract OCR to detect death-related keywords ("YOU DIED", "死", etc.)
 4. **Game Detection**: Automatically detects which game is running based on process names
 5. **Death Counting**: Increments the death counter for the detected game
@@ -113,6 +113,7 @@ If you encounter issues:
 4. **Internet Connection**: Verify internet connection for Japanese pack auto-download
 5. **Log Files**: Check the log output in the installer for specific error messages
 6. **Debug Tools**: Use files in `Debug.Test/` folder for troubleshooting OCR and detection issues
+7. **OCR Settings**: All OCR preprocessing settings (upscale factor, interpolation, adaptive threshold, contrast enhancement) are configurable per game in `games_config.json`. Defaults are optimized for maximum accuracy with large, high-contrast text.
 
 ## Building the Installer
 
