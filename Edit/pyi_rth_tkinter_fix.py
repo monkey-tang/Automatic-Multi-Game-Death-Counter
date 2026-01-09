@@ -1,6 +1,6 @@
 """
 Runtime hook to fix Tcl/Tk version conflicts by using system Tcl/Tk when available.
-This ensures the installer works with Python 3.8-3.13 regardless of Tcl version.
+This ensures the installer works with Python 3.8-3.12 regardless of Tcl version.
 This runs early in the PyInstaller boot process.
 """
 import os
