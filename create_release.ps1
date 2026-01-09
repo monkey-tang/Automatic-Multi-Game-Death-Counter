@@ -147,4 +147,3 @@ try {
 Write-Host ""
 Write-Host "Release created successfully!" -ForegroundColor Green
 Write-Host "View at: https://github.com/$RepoOwner/$RepoName/releases/tag/$Tag" -ForegroundColor Cyan
-
