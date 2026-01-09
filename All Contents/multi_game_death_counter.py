@@ -110,6 +110,14 @@ DEFAULT_GAMES = {
         "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
         "monitor_index": 2,
         "process_names": ["eldenring.exe", "elden ring.exe"],  # Process names to detect
+        # OCR preprocessing settings (accuracy-optimized defaults)
+        "ocr_upscale_factor": 3.0,  # 3x for maximum quality
+        "ocr_interpolation": "LANCZOS4",  # Best quality interpolation
+        "ocr_adaptive_block_size": 17,  # Optimized for large, bold text
+        "ocr_adaptive_c": 3,  # Optimized for high contrast
+        "ocr_use_clahe": True,  # Enable contrast enhancement for accuracy
+        "ocr_morphology_kernel": 3,  # Better noise removal
+        "ocr_coverage_threshold": 0.003,  # Minimum coverage for color mask
     },
     "Dark Souls 3": {
         "region": {"use_percentages": True, "left": 0.2708, "top": 0.4352, "width": 0.4583, "height": 0.1852},
@@ -117,6 +125,14 @@ DEFAULT_GAMES = {
         "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
         "monitor_index": 2,
         "process_names": ["darksoulsiii.exe", "dark souls iii.exe"],
+        # OCR preprocessing settings (accuracy-optimized defaults)
+        "ocr_upscale_factor": 3.0,
+        "ocr_interpolation": "LANCZOS4",
+        "ocr_adaptive_block_size": 17,
+        "ocr_adaptive_c": 3,
+        "ocr_use_clahe": True,
+        "ocr_morphology_kernel": 3,
+        "ocr_coverage_threshold": 0.003,
     },
     "Dark Souls Remastered": {
         "region": {"use_percentages": True, "left": 0.2708, "top": 0.4352, "width": 0.4583, "height": 0.1852},
@@ -124,6 +140,14 @@ DEFAULT_GAMES = {
         "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
         "monitor_index": 2,
         "process_names": ["darksoulsremastered.exe", "dark souls remastered.exe"],
+        # OCR preprocessing settings (accuracy-optimized defaults)
+        "ocr_upscale_factor": 3.0,
+        "ocr_interpolation": "LANCZOS4",
+        "ocr_adaptive_block_size": 17,
+        "ocr_adaptive_c": 3,
+        "ocr_use_clahe": True,
+        "ocr_morphology_kernel": 3,
+        "ocr_coverage_threshold": 0.003,
     },
     "Dark Souls II: Scholar of the First Sin": {
         "region": {"use_percentages": True, "left": 0.2708, "top": 0.4352, "width": 0.4583, "height": 0.1852},
@@ -131,6 +155,14 @@ DEFAULT_GAMES = {
         "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
         "monitor_index": 2,
         "process_names": ["darksoulsii.exe", "dark souls ii.exe", "darksouls2.exe"],
+        # OCR preprocessing settings (accuracy-optimized defaults)
+        "ocr_upscale_factor": 3.0,
+        "ocr_interpolation": "LANCZOS4",
+        "ocr_adaptive_block_size": 17,
+        "ocr_adaptive_c": 3,
+        "ocr_use_clahe": True,
+        "ocr_morphology_kernel": 3,
+        "ocr_coverage_threshold": 0.003,
     },
     "Sekiro": {
         "region": {"use_percentages": True, "left": 0.3802, "top": 0.2685, "width": 0.2240, "height": 0.4074},
@@ -139,6 +171,14 @@ DEFAULT_GAMES = {
         "tesseract_lang": "jpn+eng",
         "monitor_index": 2,
         "process_names": ["sekiro.exe"],
+        # OCR preprocessing settings (accuracy-optimized defaults, may need adjustment for Japanese)
+        "ocr_upscale_factor": 3.0,
+        "ocr_interpolation": "LANCZOS4",
+        "ocr_adaptive_block_size": 17,
+        "ocr_adaptive_c": 3,
+        "ocr_use_clahe": True,
+        "ocr_morphology_kernel": 3,
+        "ocr_coverage_threshold": 0.003,
     },
 }
 
@@ -769,11 +809,45 @@ def grab_region(sct: mss, monitor_index: int, region: dict, game_config: Dict = 
     return img
 
 
-def preprocess_for_ocr(img_rgb: Image.Image) -> Tuple[Image.Image, Dict]:
+def preprocess_for_ocr(img_rgb: Image.Image, game_config: Dict = None) -> Tuple[Image.Image, Dict]:
     """
     Preprocess image for OCR with multiple fallback strategies.
     Improved upscaling and sharpening for better OCR accuracy and reduced pixelation.
+    
+    Args:
+        img_rgb: Input RGB image (PIL Image)
+        game_config: Optional game configuration dict with OCR settings
+        
+    OCR Settings (configurable in games_config.json):
+        - ocr_upscale_factor: Final upscale factor (default: 3.0, accuracy-optimized)
+        - ocr_interpolation: "LANCZOS4" (best quality) or "CUBIC" (faster)
+        - ocr_adaptive_block_size: Block size for adaptive threshold (default: 17 for large text)
+        - ocr_adaptive_c: C constant for adaptive threshold (default: 3 for high contrast)
+        - ocr_use_clahe: Enable CLAHE contrast enhancement (default: true for accuracy)
+        - ocr_morphology_kernel: Morphology kernel size (default: 3 for better noise removal)
+        - ocr_coverage_threshold: Minimum coverage for color mask (default: 0.003)
     """
+    # Get OCR settings from game config or use accuracy-optimized defaults
+    if game_config is None:
+        game_config = {}
+    
+    # Accuracy-optimized defaults (prioritize quality over speed)
+    upscale_factor = game_config.get("ocr_upscale_factor", 3.0)  # 3x for maximum quality
+    interpolation_str = game_config.get("ocr_interpolation", "LANCZOS4").upper()
+    adaptive_block_size = game_config.get("ocr_adaptive_block_size", 17)  # Optimized for large text
+    adaptive_c = game_config.get("ocr_adaptive_c", 3)  # Optimized for high contrast
+    use_clahe = game_config.get("ocr_use_clahe", True)  # Enable contrast enhancement
+    morphology_kernel_size = game_config.get("ocr_morphology_kernel", 3)  # Better noise removal
+    coverage_threshold = game_config.get("ocr_coverage_threshold", 0.003)
+    
+    # Map interpolation string to OpenCV constant
+    interpolation_map = {
+        "LANCZOS4": cv2.INTER_LANCZOS4,  # Best quality, slower
+        "CUBIC": cv2.INTER_CUBIC,  # Good quality, faster
+        "LINEAR": cv2.INTER_LINEAR,  # Fast, lower quality
+    }
+    interpolation = interpolation_map.get(interpolation_str, cv2.INTER_LANCZOS4)
+    
     # Convert PIL to numpy array
     rgb = np.array(img_rgb)
     
@@ -790,10 +864,8 @@ def preprocess_for_ocr(img_rgb: Image.Image) -> Tuple[Image.Image, Dict]:
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     
     def upscale(img_cv):
-        """Upscale image 3x for better OCR quality and reduced pixelation."""
-        # Use LANCZOS interpolation for better quality (slower but much better for text)
-        # 3x upscale gives better results than 2x for pixelated text
-        return cv2.resize(img_cv, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_LANCZOS4)
+        """Upscale image using configurable factor and interpolation for maximum OCR accuracy."""
+        return cv2.resize(img_cv, None, fx=upscale_factor, fy=upscale_factor, interpolation=interpolation)
     
     # Strategy 1: Try HSV red mask (for "YOU DIED" red text)
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
@@ -817,9 +889,9 @@ def preprocess_for_ocr(img_rgb: Image.Image) -> Tuple[Image.Image, Dict]:
     # Combine red and white masks
     mask = cv2.bitwise_or(red_mask, white_mask)
     
-    # Clean noise with better morphology operations
-    # Use smaller kernel for less aggressive cleaning (preserves text better)
-    kernel = np.ones((2, 2), np.uint8)
+    # Clean noise with configurable morphology operations
+    # Larger kernel (3x3) provides better noise removal while preserving text
+    kernel = np.ones((morphology_kernel_size, morphology_kernel_size), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=1)
     # Gentle dilation to connect text characters
@@ -831,41 +903,51 @@ def preprocess_for_ocr(img_rgb: Image.Image) -> Tuple[Image.Image, Dict]:
     
     info = {"mode": "HSV_RED_WHITE", "coverage": coverage}
     
-    # Use red/white mask if coverage is reasonable (at least 0.3% of image - lowered threshold)
-    if coverage >= 0.003:
+    # Use red/white mask if coverage meets threshold (configurable)
+    if coverage >= coverage_threshold:
         # Invert mask: white text on black background -> black text on white
         inv = cv2.bitwise_not(mask)
-        # Apply slight sharpening to improve text clarity
+        # Upscale FIRST for better quality, then sharpen
+        out = upscale(inv)
+        # Apply sharpening AFTER upscale for cleaner edges (better accuracy)
         kernel_sharpen = np.array([[-1, -1, -1],
                                    [-1,  9, -1],
                                    [-1, -1, -1]])
-        inv = cv2.filter2D(inv, -1, kernel_sharpen)
-        out = upscale(inv)
+        out = cv2.filter2D(out, -1, kernel_sharpen)
         return Image.fromarray(out), info
     
     # Strategy 2: Grayscale with adaptive threshold (works for any text color)
     # This fallback ensures we NEVER get a black image - adaptive threshold always produces output
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    
+    # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization) for better accuracy
+    if use_clahe:
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        gray = clahe.apply(gray)
+    
     # Use less blur to preserve text details
     gray_blur = cv2.GaussianBlur(gray, (3, 3), 0)
     # Apply unsharp mask for better text clarity
     gaussian = cv2.GaussianBlur(gray_blur, (0, 0), 2.0)
     unsharp = cv2.addWeighted(gray_blur, 1.5, gaussian, -0.5, 0)
     
+    # Use configurable adaptive threshold optimized for large, high-contrast text
+    # Block size 17 and C=3 are optimized for Souls games' large bold text
     thr_adapt = cv2.adaptiveThreshold(
         unsharp, 255,
         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
         cv2.THRESH_BINARY,
-        31, 5
+        adaptive_block_size, adaptive_c
     )
     # Invert: make text dark on light background (Tesseract prefers dark text on light)
     thr_adapt_inv = cv2.bitwise_not(thr_adapt)
-    # Apply slight sharpening to improve text clarity
+    # Upscale FIRST for better quality, then sharpen
+    out = upscale(thr_adapt_inv)
+    # Apply sharpening AFTER upscale for cleaner edges (better accuracy)
     kernel_sharpen = np.array([[-1, -1, -1],
                                [-1,  9, -1],
                                [-1, -1, -1]])
-    thr_adapt_inv = cv2.filter2D(thr_adapt_inv, -1, kernel_sharpen)
-    out = upscale(thr_adapt_inv)
+    out = cv2.filter2D(out, -1, kernel_sharpen)
     info["mode"] = "ADAPTIVE_THRESHOLD"
     info["coverage"] = 0.0  # Set coverage for consistency
     return Image.fromarray(out), info
@@ -1206,7 +1288,7 @@ def main_loop():
                         log(f"DEBUG RAW SAVE ERROR: {e}")
                 
                 # Preprocess + OCR
-                ocr_img, info = preprocess_for_ocr(img_rgb)
+                ocr_img, info = preprocess_for_ocr(img_rgb, game_config)
                 
                 if save_debug:
                     try:
