@@ -554,7 +554,7 @@ class DeathCounterGUI:
         return None
     
     def is_python_version_compatible(self, python_exe):
-        """Check if Python version is compatible (3.8-3.13)."""
+        """Check if Python version is compatible (3.8-3.12)."""
         try:
             # Try to get version without hanging - use a very short timeout
             result = subprocess.run(
@@ -571,8 +571,8 @@ class DeathCounterGUI:
                 if match:
                     major = int(match.group(1))
                     minor = int(match.group(2))
-                    # Check if version is 3.8-3.13
-                    if major == 3 and 8 <= minor <= 13:
+                    # Check if version is 3.8-3.12 (3.13 has Tcl/Tk compatibility issues)
+                    if major == 3 and 8 <= minor <= 12:
                         return True
         except:
             pass
@@ -580,7 +580,7 @@ class DeathCounterGUI:
     
     def find_python_executable_daemon(self):
         """Find python.exe specifically (not pythonw.exe) for daemon.
-        Only returns Python versions 3.8-3.13 (compatible with dependencies)."""
+        Only returns Python versions 3.8-3.12 (compatible with dependencies)."""
         # Try 'python' command first (should be python.exe)
         try:
             result = subprocess.run(['python', '--version'], 
@@ -628,7 +628,7 @@ class DeathCounterGUI:
                 except:
                     pass
         
-        # Common root-level Python installations (3.8-3.13)
+        # Common root-level Python installations (3.8-3.12)
         for major_minor in [(3, 13), (3, 12), (3, 11), (3, 10), (3, 9), (3, 8)]:
             version_str = f"{major_minor[0]}{major_minor[1]:02d}"  # e.g., "312", "39"
             for base_path in [
