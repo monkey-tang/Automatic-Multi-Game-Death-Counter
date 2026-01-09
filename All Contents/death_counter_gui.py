@@ -13,6 +13,32 @@ import json
 import time
 import subprocess
 import threading
+import shutil
+
+# Fix Tcl/Tk version conflicts by using system Tcl/Tk when available
+# This must be done BEFORE importing tkinter
+try:
+    # Try to find system Python's Tcl/Tk
+    python_exe = sys.executable
+    if python_exe and os.path.exists(python_exe):
+        python_dir = os.path.dirname(python_exe)
+        python_lib = os.path.join(python_dir, 'Lib')
+        tkinter_path = os.path.join(python_lib, 'tkinter')
+        
+        if os.path.exists(tkinter_path):
+            tcl_path = os.path.join(tkinter_path, 'tcl')
+            tk_path = os.path.join(tkinter_path, 'tk')
+            
+            # Verify Tcl/Tk directories exist and contain init files
+            if os.path.exists(tcl_path) and os.path.exists(tk_path):
+                init_tcl = os.path.join(tcl_path, 'init.tcl')
+                if os.path.exists(init_tcl):
+                    # Use system Tcl/Tk (works with Python 3.8-3.13)
+                    os.environ['TCL_LIBRARY'] = tcl_path
+                    os.environ['TK_LIBRARY'] = tk_path
+except Exception:
+    pass  # Fall back to default behavior
+
 from tkinter import *
 from tkinter import ttk, messagebox
 
