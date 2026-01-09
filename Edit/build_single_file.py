@@ -307,7 +307,7 @@ def find_python_executable(use_pythonw=False):
     return None
 
 def is_python_version_compatible(python_exe):
-    """Check if Python version is compatible (3.8-3.13)."""
+    """Check if Python version is compatible (3.8-3.12)."""
     try:
         result = subprocess.run(
             [python_exe, '--version'],
@@ -323,8 +323,8 @@ def is_python_version_compatible(python_exe):
             if match:
                 major = int(match.group(1))
                 minor = int(match.group(2))
-                # Check if version is 3.8-3.13
-                if major == 3 and 8 <= minor <= 13:
+                # Check if version is 3.8-3.12 (3.13 has Tcl/Tk compatibility issues)
+                if major == 3 and 8 <= minor <= 12:
                     return True
     except:
         pass
@@ -670,12 +670,12 @@ class InstallerGUI:
             if is_compatible:
                 self.python_status.config(text=f"✓ Python: {{python_version}}", foreground="green")
             else:
-                self.python_status.config(text=f"⚠ Python: {{python_version}} (Requires 3.8-3.13)", foreground="orange")
+                self.python_status.config(text=f"⚠ Python: {{python_version}} (Requires 3.8-3.12)", foreground="orange")
                 messagebox.showwarning("Python Version Warning", 
                     f"Your Python version ({{python_version}}) may not be fully compatible.\\n\\n"
-                    "This application requires Python 3.8-3.13 for optimal compatibility.\\n\\n"
+                    "This application requires Python 3.8-3.12 for optimal compatibility.\\n\\n"
                     "Please install a compatible Python version from:\\n"
-                    "https://www.python.org/downloads/\\n\\n"
+                    "https://www.python.org/downloads/release/python-3121/\\n\\n"
                     "The application may still work, but some features may not function correctly.")
         else:
             self.python_status.config(text="✗ Python not found", foreground="red")
