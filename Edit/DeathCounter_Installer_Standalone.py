@@ -893,6 +893,29 @@ class InstallerGUI:
                 messagebox.showerror("Error", error_msg)
                 return
             
+            # Fix Tcl/Tk version conflicts by setting environment variables
+            # Find the Python installation's Tcl/Tk directories
+            env = os.environ.copy()
+            try:
+                python_dir = os.path.dirname(python_exe)
+                python_lib = os.path.join(python_dir, 'Lib')
+                tkinter_path = os.path.join(python_lib, 'tkinter')
+                
+                if os.path.exists(tkinter_path):
+                    tcl_path = os.path.join(tkinter_path, 'tcl')
+                    tk_path = os.path.join(tkinter_path, 'tk')
+                    
+                    # Verify Tcl/Tk directories exist and contain init files
+                    if os.path.exists(tcl_path) and os.path.exists(tk_path):
+                        init_tcl = os.path.join(tcl_path, 'init.tcl')
+                        if os.path.exists(init_tcl):
+                            # Set environment variables to use system Tcl/Tk
+                            env['TCL_LIBRARY'] = tcl_path
+                            env['TK_LIBRARY'] = tk_path
+                            self.log(f"Using system Tcl/Tk: {tcl_path}")
+            except Exception as e:
+                self.log(f"Warning: Could not set Tcl/Tk paths: {e}")
+            
             self.log(f"Launching: {python_exe} {gui_path}")
             self.log(f"Working directory: {INSTALL_DIR}")
             
@@ -902,6 +925,7 @@ class InstallerGUI:
             process = subprocess.Popen(
                 [python_exe, gui_path], 
                 cwd=INSTALL_DIR,
+                env=env,  # Pass environment with Tcl/Tk paths
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 creationflags=CREATE_NO_WINDOW  # Hide console window
