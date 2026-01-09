@@ -43,3 +43,11 @@ current_deaths.txt
 current_game.txt
 daemon.lock
 STOP
+
+# Development/maintenance scripts (local only)
+cleanup_github_repo.ps1
+create_release.ps1
+commit_with_descriptions.ps1
+update_commit_messages.ps1
+amend_deathcounter_commit.ps1
+git-msg-filter.sh
