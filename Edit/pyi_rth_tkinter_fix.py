@@ -55,9 +55,13 @@ if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
                 if os.path.exists(tcl_path) and os.path.exists(tk_path):
                     init_tcl = os.path.join(tcl_path, 'init.tcl')
                     if os.path.exists(init_tcl):
-                        # Use system Tcl/Tk
-                        os.environ['TCL_LIBRARY'] = tcl_path
-                        os.environ['TK_LIBRARY'] = tk_path
+                        # Use system Tcl/Tk with absolute paths
+                        tcl_abs = os.path.abspath(tcl_path)
+                        tk_abs = os.path.abspath(tk_path)
+                        os.environ['TCL_LIBRARY'] = tcl_abs
+                        os.environ['TK_LIBRARY'] = tk_abs
+                        os.environ['TCL_LIBRARY_PATH'] = tcl_abs
+                        os.environ['TK_LIBRARY_PATH'] = tk_abs
     except Exception:
         # If anything fails, just continue - bundled Tcl/Tk will be used
         pass

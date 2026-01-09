@@ -21,47 +21,101 @@ import shutil
 # Only run this if NOT running as a PyInstaller bundle (frozen=False)
 if not getattr(sys, 'frozen', False):
     try:
-        # Get the Python executable path
+        # Strategy 1: Use current Python executable's Tcl/Tk (most reliable)
         python_exe = sys.executable
         if python_exe and os.path.exists(python_exe):
-            # Get Python installation directory
             python_dir = os.path.dirname(os.path.abspath(python_exe))
             python_lib = os.path.join(python_dir, 'Lib')
             tkinter_path = os.path.join(python_lib, 'tkinter')
             
-            # Check if tkinter directory exists
             if os.path.exists(tkinter_path):
                 tcl_path = os.path.join(tkinter_path, 'tcl')
                 tk_path = os.path.join(tkinter_path, 'tk')
                 
-                # Verify Tcl/Tk directories exist and contain init files
                 if os.path.exists(tcl_path) and os.path.exists(tk_path):
                     init_tcl = os.path.join(tcl_path, 'init.tcl')
                     if os.path.exists(init_tcl):
-                        # CRITICAL: Set environment variables to use system Tcl/Tk
-                        # Use absolute paths to ensure they're used
+                        # Use system Tcl/Tk from current Python
                         tcl_abs = os.path.abspath(tcl_path)
                         tk_abs = os.path.abspath(tk_path)
                         os.environ['TCL_LIBRARY'] = tcl_abs
                         os.environ['TK_LIBRARY'] = tk_abs
-                        # Clear any PyInstaller temp directory references
-                        if 'TCL_LIBRARY_PATH' in os.environ:
-                            del os.environ['TCL_LIBRARY_PATH']
-                        if 'TK_LIBRARY_PATH' in os.environ:
-                            del os.environ['TK_LIBRARY_PATH']
-                        # Force tkinter to use these paths
                         os.environ['TCL_LIBRARY_PATH'] = tcl_abs
                         os.environ['TK_LIBRARY_PATH'] = tk_abs
-except Exception as e:
-    # If detection fails, try to continue - but log if possible
-    try:
-        import traceback
-        error_log = os.path.join(os.path.dirname(__file__), 'tcl_tk_detection_error.log')
-        with open(error_log, 'w') as f:
-            f.write(f"Tcl/Tk detection error: {e}\n")
-            f.write(traceback.format_exc())
-    except:
-        pass  # Can't even log, just continue
+                        # Clear any conflicting environment variables
+                        for key in list(os.environ.keys()):
+                            if '_MEI' in key and ('TCL' in key or 'TK' in key):
+                                try:
+                                    del os.environ[key]
+                                except:
+                                    pass
+        
+        # Strategy 2: If current Python's Tcl/Tk not found, search common locations
+        if 'TCL_LIBRARY' not in os.environ or 'TK_LIBRARY' not in os.environ:
+            possible_python_paths = []
+            
+            # Check if Python is in PATH
+            try:
+                python_exe = shutil.which('python')
+                if python_exe:
+                    possible_python_paths.append(python_exe)
+            except:
+                pass
+            
+            # Check common Python installation locations
+            common_paths = [
+                os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs', 'Python'),
+                os.path.join(os.environ.get('PROGRAMFILES', ''), 'Python'),
+                os.path.join(os.environ.get('PROGRAMFILES(X86)', ''), 'Python'),
+            ]
+            
+            for base_path in common_paths:
+                if os.path.exists(base_path):
+                    try:
+                        for item in os.listdir(base_path):
+                            python_dir = os.path.join(base_path, item)
+                            if os.path.isdir(python_dir):
+                                python_exe = os.path.join(python_dir, 'python.exe')
+                                if os.path.exists(python_exe):
+                                    possible_python_paths.append(python_exe)
+                    except:
+                        continue
+            
+            # Try each Python installation
+            for python_exe in possible_python_paths:
+                try:
+                    python_dir = os.path.dirname(os.path.abspath(python_exe))
+                    python_lib = os.path.join(python_dir, 'Lib')
+                    tkinter_path = os.path.join(python_lib, 'tkinter')
+                    
+                    if os.path.exists(tkinter_path):
+                        tcl_path = os.path.join(tkinter_path, 'tcl')
+                        tk_path = os.path.join(tkinter_path, 'tk')
+                        
+                        if os.path.exists(tcl_path) and os.path.exists(tk_path):
+                            init_tcl = os.path.join(tcl_path, 'init.tcl')
+                            if os.path.exists(init_tcl):
+                                # Use this Python's Tcl/Tk
+                                tcl_abs = os.path.abspath(tcl_path)
+                                tk_abs = os.path.abspath(tk_path)
+                                os.environ['TCL_LIBRARY'] = tcl_abs
+                                os.environ['TK_LIBRARY'] = tk_abs
+                                os.environ['TCL_LIBRARY_PATH'] = tcl_abs
+                                os.environ['TK_LIBRARY_PATH'] = tk_abs
+                                break  # Found working Tcl/Tk
+                except Exception:
+                    continue  # Try next Python installation
+                    
+    except Exception as e:
+        # If detection fails, try to continue - but log if possible
+        try:
+            import traceback
+            error_log = os.path.join(os.path.dirname(__file__), 'tcl_tk_detection_error.log')
+            with open(error_log, 'w') as f:
+                f.write(f"Tcl/Tk detection error: {e}\n")
+                f.write(traceback.format_exc())
+        except:
+            pass  # Can't even log, just continue
 
 from tkinter import *
 from tkinter import ttk, messagebox
