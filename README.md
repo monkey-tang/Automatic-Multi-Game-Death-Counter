@@ -2,7 +2,7 @@
 
 ## Latest Version: v1.5
 
-**DeathCounterInstaller.exe** - Complete standalone Windows installer with automatic Japanese language pack download for Sekiro support. Includes Python version compatibility checking (requires Python 3.8-3.13).
+**DeathCounterInstaller.exe** - Complete standalone Windows installer with automatic Japanese language pack download for Sekiro support. Includes Python version compatibility checking (requires Python 3.8-3.12).
 
 ## Quick Start
 
@@ -14,7 +14,7 @@
 ## Features
 
 - **Automatic Setup**: Extracts all necessary files and dependencies
-- **System Checks**: Verifies Python version (3.8-3.13), Tesseract OCR, and dependencies
+- **System Checks**: Verifies Python version (3.8-3.12), Tesseract OCR, and dependencies
 - **Python Version Warning**: Alerts users if their Python version is incompatible
 - **Auto-Download**: Automatically downloads Japanese language packs for Sekiro support
 - **Streamer.bot Integration**: Easy import of Streamer.bot actions
@@ -91,7 +91,7 @@ The Death Counter uses Optical Character Recognition (OCR) to detect "YOU DIED" 
 ## System Requirements
 
 - Windows 10/11
-- Python 3.8-3.13 (auto-detected or installable via installer). The installer will warn if an incompatible Python version is detected.
+- Python 3.8-3.12 (auto-detected or installable via installer). The installer will warn if an incompatible Python version is detected. **Note:** Python 3.13 has Tcl/Tk compatibility issues and is not supported.
 - Tesseract OCR (auto-downloadable via installer)
 - Internet connection (for initial setup and Japanese pack download)
 
@@ -107,7 +107,7 @@ The Death Counter uses Optical Character Recognition (OCR) to detect "YOU DIED" 
 
 If you encounter issues:
 
-1. **Python Version**: Ensure you have Python 3.8-3.13 installed. The installer will show a warning if your Python version is incompatible.
+1. **Python Version**: Ensure you have Python 3.8-3.12 installed. The installer will show a warning if your Python version is incompatible. **Note:** Python 3.13 has Tcl/Tk compatibility issues and is not supported.
 2. **Administrator Rights**: Ensure you're running the installer as Administrator (may be needed for Japanese pack installation)
 3. **Tesseract OCR**: Check that Tesseract OCR is properly installed and accessible
 4. **Internet Connection**: Verify internet connection for Japanese pack auto-download
