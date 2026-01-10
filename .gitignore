@@ -1,0 +1,141 @@
+# Python / build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+*.spec
+!DeathCounterInstaller.spec
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs / debug
+*.log
+debug*.png
+test_*.png
+*.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Old versions and backups
+versionsdeathcounter/
+backup/
+
+# Executables (keep installers in online-exe/ and offline-exe/ folders)
+*.exe
+!online-exe/DeathCounterInstaller*.exe
+!offline-exe/DeathCounterInstaller*.exe
+# Local build folder (not in repo)
+Offline/
+dist/
+build/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# State files
+death_state.json
+death_counter*.txt
+current_deaths.txt
+current_game.txt
+daemon.lock
+STOP
+
+# Development/maintenance scripts (local only)
+cleanup_github_repo.ps1
+create_release.ps1
+commit_with_descriptions.ps1
+update_commit_messages.ps1
+amend_deathcounter_commit.ps1
+git-msg-filter.sh
+
+# Test files and development helpers (not for end users)
+test_*.py
+*_test.py
+*_test_*.py
+*test*.py
+build_exe_now.py
+build_installer_now.py
+build_spec.py
+check_build_status.py
+verify_installer.py
+cleanup_test_files.py
+final_cleanup.py
+move_to_testing.py
+production_readiness_check.py
+
+# Development/testing documentation (not for end users)
+*_STATUS.md
+*_REPORT.md
+*_SUMMARY.md
+*_ANALYSIS.md
+*_EXPLANATION.md
+*_COMPARISON.md
+*_LIST.md
+*_CHECKLIST.md
+*_COMPLETE.md
+*_READY.md
+DEBUGGING_*.md
+TEST_*.md
+VERIFY_*.md
+VERIFICATION_*.md
+CLEANUP_*.md
+FILES_*.md
+FILE_*.md
+ONCE_OVER_*.md
+
+# Personal/home directory files (exclude everything except DeathCounter project)
+.bash_history
+.cursor/
+.gitconfig
+.packettracer
+.ssh/
+AppData/
+Contacts/
+Desktop/
+Documents/
+Downloads/
+Favorites/
+Links/
+Music/
+Pictures/
+Saved Games/
+Searches/
+Videos/
+OneDrive/
+Cisco Packet Tracer*/
+DeathCounterLauncher.*
+NTUSER.DAT*
+ntuser.*
+*.csproj
+curseforge/
+create_hyperv_vm.ps1
+run_vm_script.ps1
+setup_proxmox_hyperv.ps1
+PROXMOX_SETUP_INSTRUCTIONS.txt
+IMPROVEMENTS.md
+README_DEATH_COUNTER.md
+StreamerBot_*.cs
+!deathcounteraction.cs  # Include this specific Streamer.bot integration file
+launch_death_counter.bat
+switch_game.py
+test_preprocessing.py
+"All Contents/"
+Edit/
+Debug.Test/
+DeathCounter/
+FILE_DESCRIPTIONS.md
+
+# Internal documentation (keep local, not for public)
+REPOSITORY_STRUCTURE.md
+TESTING_CHECKLIST.md
+PROGRESS_SUMMARY_*.md
+COMPREHENSIVE_TESTING_PLAN.md
