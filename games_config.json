@@ -1,0 +1,316 @@
+{
+  "settings": {
+    "tick_seconds": 0.3,
+    "debug_every_ticks": 30,
+    "consecutive_hits": 2,
+    "cooldown_seconds": 5.0,
+    "monitor_index": 1,
+    "fuzzy_ocr_matching": true,
+    "detection_methods": {
+      "ocr": true,
+      "log_monitoring": false,
+      "memory_scanning": false
+    }
+  },
+  "games": {
+    "Elden Ring": {
+      "region": {
+        "use_percentages": true,
+        "left": 0.2708,
+        "top": 0.4352,
+        "width": 0.4583,
+        "height": 0.1852
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "YOUDED",
+        "DIED",
+        "Y0UDIED",
+        "Y0UDIE",
+        "Y0UDED",
+        "YOUD13D",
+        "YOUD1ED",
+        "YOUDI3D",
+        "Y0UD13D",
+        "Y0UD1ED",
+        "Y0UDI3D",
+        "Y0U DIED",
+        "YOU D13D",
+        "Y0U D13D"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "eldenring.exe",
+        "elden ring.exe"
+      ]
+    },
+    "Dark Souls 3": {
+      "region": {
+        "use_percentages": true,
+        "left": 0.2708,
+        "top": 0.4352,
+        "width": 0.4583,
+        "height": 0.1852
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "YOUD1ED",
+        "YOUDlED",
+        "YOUDI",
+        "OUDIED",
+        "YOUDIE0",
+        "Y0UDIED",
+        "Y0UDIE",
+        "Y0UD1ED",
+        "Y0UD13D",
+        "Y0UDI3D",
+        "YOUD13D",
+        "YOUDI3D",
+        "Y0U DIED",
+        "YOU D13D",
+        "Y0U D13D",
+        "1OUDIED",
+        "10UDIED",
+        "YOUD1E0",
+        "Y0UD1E0"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "darksoulsiii.exe",
+        "dark souls iii.exe"
+      ]
+    },
+    "Dark Souls Remastered": {
+      "region": {
+        "use_percentages": true,
+        "left": 0.2708,
+        "top": 0.4352,
+        "width": 0.4583,
+        "height": 0.1852
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "YOUD1ED",
+        "YOUDlED",
+        "YOUDI",
+        "OUDIED",
+        "YOUDIE0",
+        "Y0UDIED",
+        "Y0UDIE",
+        "Y0UD1ED",
+        "Y0UD13D",
+        "Y0UDI3D",
+        "YOUD13D",
+        "YOUDI3D",
+        "Y0U DIED",
+        "YOU D13D",
+        "Y0U D13D",
+        "1OUDIED",
+        "10UDIED",
+        "YOUD1E0",
+        "Y0UD1E0"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "darksoulsremastered.exe",
+        "dark souls remastered.exe"
+      ]
+    },
+    "Dark Souls II: Scholar of the First Sin": {
+      "region": {
+        "use_percentages": true,
+        "left": 0.2708,
+        "top": 0.4352,
+        "width": 0.4583,
+        "height": 0.1852
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "YOUD1ED",
+        "YOUDlED",
+        "YOUDI",
+        "OUDIED",
+        "YOUDIE0",
+        "Y0UDIED",
+        "Y0UDIE",
+        "Y0UD1ED",
+        "Y0UD13D",
+        "Y0UDI3D",
+        "YOUD13D",
+        "YOUDI3D",
+        "Y0U DIED",
+        "YOU D13D",
+        "Y0U D13D",
+        "1OUDIED",
+        "10UDIED",
+        "YOUD1E0",
+        "Y0UD1E0"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "darksoulsii.exe",
+        "dark souls ii.exe"
+      ]
+    },
+    "Sekiro": {
+      "region": {
+        "use_percentages": true,
+        "left": 0.3802,
+        "top": 0.2685,
+        "width": 0.2240,
+        "height": 0.4074
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "DEATH",
+        "Y0UDIED",
+        "Y0UDIE",
+        "YOUD13D",
+        "YOUD1ED",
+        "Y0UD13D",
+        "Y0UD1ED",
+        "D34TH",
+        "DE4TH",
+        "DEA7H",
+        "Y0U DIED",
+        "YOU D13D",
+        "Y0U D13D"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "sekiro.exe"
+      ]
+    },
+    "Demon's Souls (Remake)": {
+      "region": {
+        "use_percentages": true,
+        "left": 0.2708,
+        "top": 0.4352,
+        "width": 0.4583,
+        "height": 0.1852
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "YOUD1ED",
+        "YOUDlED",
+        "YOUDI",
+        "OUDIED",
+        "YOUDIE0",
+        "Y0UDIED",
+        "Y0UDIE",
+        "Y0UD1ED",
+        "Y0UD13D",
+        "Y0UDI3D",
+        "YOUD13D",
+        "YOUDI3D",
+        "Y0U DIED",
+        "YOU D13D",
+        "Y0U D13D",
+        "1OUDIED",
+        "10UDIED",
+        "YOUD1E0",
+        "Y0UD1E0"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "demonssouls.exe",
+        "demon's souls.exe",
+        "demons-souls.exe",
+        "psplus.exe",
+        "remoteplay.exe"
+      ]
+    },
+    "Dark Souls: Prepare to Die Edition": {
+      "region": {
+        "use_percentages": true,
+        "left": 0.2708,
+        "top": 0.4352,
+        "width": 0.4583,
+        "height": 0.1852
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "YOUD1ED",
+        "YOUDlED",
+        "YOUDI",
+        "OUDIED",
+        "YOUDIE0",
+        "Y0UDIED",
+        "Y0UDIE",
+        "Y0UD1ED",
+        "Y0UD13D",
+        "Y0UDI3D",
+        "YOUD13D",
+        "YOUDI3D",
+        "Y0U DIED",
+        "YOU D13D",
+        "Y0U D13D",
+        "1OUDIED",
+        "10UDIED",
+        "YOUD1E0",
+        "Y0UD1E0"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "darksouls.exe",
+        "dark souls.exe",
+        "darksoulspreparetodie.exe",
+        "darksoulsptde.exe",
+        "data.exe"
+      ]
+    },
+    "Dark Souls 2": {
+      "region": {
+        "use_percentages": true,
+        "left": 0.2708,
+        "top": 0.4352,
+        "width": 0.4583,
+        "height": 0.1852
+      },
+      "keywords": [
+        "YOUDIED",
+        "YOUDIE",
+        "YOUD1ED",
+        "YOUDlED",
+        "YOUDI",
+        "OUDIED",
+        "YOUDIE0",
+        "Y0UDIED",
+        "Y0UDIE",
+        "Y0UD1ED",
+        "Y0UD13D",
+        "Y0UDI3D",
+        "YOUD13D",
+        "YOUDI3D",
+        "Y0U DIED",
+        "YOU D13D",
+        "Y0U D13D",
+        "1OUDIED",
+        "10UDIED",
+        "YOUD1E0",
+        "Y0UD1E0"
+      ],
+      "tesseract_config": "--oem 3 --psm 7 -c tessedit_char_whitelist=YOUDIEADFT",
+      "monitor_index": 2,
+      "process_names": [
+        "darksouls2.exe",
+        "dark souls 2.exe"
+      ]
+    }
+  },
+  "current_game": "Dark Souls Remastered"
+}
